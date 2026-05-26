@@ -1,0 +1,196 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Master 的遊戲大廳</title>
+    <style>
+        body {
+            margin: 0;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #1a2a6c, #b21f1f, #fdbb2d);
+            background-size: 400% 400%;
+            animation: gradientBG 15s ease infinite;
+            color: white;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 20px;
+        }
+
+        @keyframes gradientBG {
+            0% { background-position: 0% 50%; }
+            50% { background-position: 100% 50%; }
+            100% { background-position: 0% 50%; }
+        }
+
+        h1 {
+            text-align: center;
+            font-size: 2.5rem;
+            margin-bottom: 30px;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.5);
+        }
+
+        .game-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 20px;
+            width: 100%;
+            max-width: 800px;
+        }
+
+        .game-card {
+            background: rgba(255, 255, 255, 0.15);
+            backdrop-filter: blur(10px);
+            border-radius: 15px;
+            padding: 20px;
+            text-align: center;
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            transition: transform 0.3s, background 0.3s;
+            cursor: pointer;
+            text-decoration: none;
+            color: white;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.2);
+        }
+
+        .game-card:hover {
+            transform: translateY(-5px);
+            background: rgba(255, 255, 255, 0.25);
+            box-shadow: 0 10px 20px rgba(0,0,0,0.3);
+        }
+
+        .icon {
+            font-size: 4rem;
+            margin-bottom: 10px;
+            display: block;
+        }
+
+        .title {
+            font-size: 1.5rem;
+            font-weight: bold;
+            display: block;
+            margin-bottom: 5px;
+        }
+
+        .desc {
+            font-size: 0.9rem;
+            opacity: 0.8;
+            display: block;
+        }
+
+        .tag {
+            display: inline-block;
+            background: #ff4757;
+            color: white;
+            padding: 2px 8px;
+            border-radius: 10px;
+            font-size: 0.7rem;
+            margin-bottom: 5px;
+            vertical-align: middle;
+        }
+        
+        .tag.hot { background: #ff4757; }
+        .tag.new { background: #2ed573; }
+        .tag.chill { background: #1e90ff; }
+
+        footer {
+            margin-top: auto;
+            padding-top: 40px;
+            font-size: 0.8rem;
+            opacity: 0.6;
+        }
+    </style>
+</head>
+<body>
+
+    <h1>🎮 Master 的遊戲大廳</h1>
+
+    <div class="game-grid">
+
+        <!-- 2048 -->
+        <a href="game_2048.html" class="game-card">
+            <span class="icon">🧩</span>
+            <div><span class="tag new">NEW</span></div>
+            <span class="title">2048</span>
+            <span class="desc">經典滑塊遊戲，數字相加湊到 2048！</span>
+        </a>
+
+        <!-- 大話骰 (Liar's Dice) -->
+        <a href="dice_game.html" class="game-card">
+            <span class="icon">🎲</span>
+            <div><span class="tag new">NEW</span> <span class="tag hot">HOT</span></div>
+            <span class="title">大話骰 (Liar's Dice)</span>
+            <span class="desc">吹牛大王就是你！酒吧經典骰盅遊戲。</span>
+        </a>
+        
+        <!-- 百家樂 -->
+        <a href="baccarat_game.html" class="game-card">
+            <span class="icon">🎰</span>
+            <div><span class="tag new">NEW</span> <span class="tag hot">HOT</span></div>
+            <span class="title">百家樂</span>
+            <span class="desc">壓莊閒、大小、單雙，$100 起手！</span>
+        </a>
+
+        <!-- 鴿子轟炸機 -->
+        <a href="pigeon_game.html" class="game-card">
+            <span class="icon">🐦💩</span>
+            <div><span class="tag new">NEW</span> <span class="tag hot">HOT</span></div>
+            <span class="title">鴿子轟炸機</span>
+            <span class="desc">扮演壞壞鴿子，在城市上空投彈！</span>
+        </a>
+
+        <!-- 跑跑卡丁車 -->
+        <a href="kart_game.html" class="game-card">
+            <span class="icon">🏎️</span>
+            <div><span class="tag new">NEW</span> <span class="tag hot">HOT</span></div>
+            <span class="title">跑跑卡丁車</span>
+            <span class="desc">3D 賽車體驗，漂移過彎！</span>
+        </a>
+        
+        <!-- 新春接金元寶 -->
+        <a href="cny_game.html" class="game-card">
+            <span class="icon">🧧</span>
+            <div><span class="tag new">NEW</span> <span class="tag hot">HOT</span></div>
+            <span class="title">新春接金元寶</span>
+            <span class="desc">移動聚寶盆，好運接不完！</span>
+        </a>
+
+        <!-- 老虎吃肉 -->
+        <a href="tiger_game.html" class="game-card">
+            <span class="icon">🐯</span>
+            <div><span class="tag new">NEW</span></div>
+            <span class="title">老虎吃肉</span>
+            <span class="desc">森林之王的大餐時間，小心火！</span>
+        </a>
+
+        <!-- 悠閒釣魚 v3 -->
+        <a href="fishing_v3.html" class="game-card">
+            <span class="icon">🎣</span>
+            <div><span class="tag chill">Relax</span></div>
+            <span class="title">悠閒釣魚</span>
+            <span class="desc">手機完美版，點擊下鉤釣大魚。</span>
+        </a>
+
+        <!-- 貪吃史萊姆 -->
+        <a href="slime_game.html" class="game-card">
+            <span class="icon">🟢</span>
+            <span class="title">貪吃史萊姆</span>
+            <span class="desc">滑來滑去，吃掉藍球變大隻。</span>
+        </a>
+
+        <!-- 貓咪大作戰 -->
+        <a href="cat_poop_game.html" class="game-card">
+            <span class="icon">🐱</span>
+            <span class="title">貓咪大作戰</span>
+            <span class="desc">雖然口味有點重... 避開小黃瓜！</span>
+        </a>
+
+    </div>
+
+    <footer>
+        Powered by OpenClaw & Master Edwin
+    </footer>
+
+</body>
+</html>

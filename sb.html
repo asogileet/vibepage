@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>每日精選減肥影片</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        /* 自定義捲軸樣式，讓手機瀏覽更順滑 */
+        body {
+            -webkit-overflow-scrolling: touch;
+            background-color: #f3f4f6;
+        }
+        .video-card {
+            transition: transform 0.2s;
+        }
+        .video-card:active {
+            transform: scale(0.98);
+        }
+    </style>
+</head>
+<body class="bg-gray-100 text-gray-800 font-sans antialiased">
+
+    <!-- App Container -->
+    <div class="max-w-md mx-auto min-h-screen bg-white shadow-xl overflow-hidden flex flex-col">
+        
+        <!-- Header -->
+        <header class="bg-teal-600 text-white p-5 text-center shadow-md sticky top-0 z-10">
+            <h1 class="text-xl font-bold tracking-wider">🔥 隨機減肥特訓</h1>
+            <p class="text-teal-100 text-xs mt-1">今天要做哪三個運動呢？</p>
+        </header>
+
+        <!-- Main Content Area -->
+        <main class="flex-1 p-4 space-y-6 overflow-y-auto" id="video-container">
+            <!-- Videos will be injected here by JavaScript -->
+            <div class="flex flex-col items-center justify-center h-64 text-gray-500">
+                <svg class="animate-spin h-8 w-8 text-teal-600 mb-3" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                    <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                    <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                </svg>
+                <p>正在挑選最適合的影片...</p>
+            </div>
+        </main>
+
+        <!-- Floating Action Button / Footer -->
+        <div class="p-4 bg-white border-t border-gray-200 sticky bottom-0 z-10">
+            <button onclick="renderRandomVideos()" class="w-full bg-teal-600 hover:bg-teal-700 text-white font-bold py-3 px-4 rounded-xl shadow-lg transform transition duration-200 active:scale-95 flex items-center justify-center gap-2">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                </svg>
+                換一組推薦
+            </button>
+        </div>
+    </div>
+
+    <script>
+        // 影片資料庫：已更新為較常允許嵌入的熱門影片
+        const videoPool = [
+            // Pamela Reif (通常允許嵌入)
+            { id: "UItWltVZZmE", title: "10分鐘六塊肌訓練", channel: "Pamela Reif" },
+            { id: "1f8yoFFdkcY", title: "10分鐘翹臀訓練", channel: "Pamela Reif" },
+            { id: "UbOQ4k2hBvw", title: "20分鐘全身燃脂 (無跳躍)", channel: "Pamela Reif" },
+            
+            // Emi Wong
+            { id: "srcdAdV5K8g", title: "30分鐘全身消脂增肌", channel: "Emi Wong" },
+            { id: "M0uO8X3_tEA", title: "15分鐘早晨喚醒運動", channel: "MadFit" }, // MadFit 也是英文大台，通常ok
+            
+            // Coffee 林芊妤 (挑選較新的熱門影片)
+            { id: "p0t043iCjpI", title: "20分鐘特強瘦手臂/背/肚", channel: "Coffee林芊妤" },
+            { id: "N6yopTf-nVU", title: "30分鐘全身消脂運動", channel: "Coffee林芊妤" },
+            
+            // May Fit
+            { id: "H3jJ29oE8Zg", title: "4分鐘 Tabata 高強度間歇", channel: "May Fit" },
+            
+            // 其他
+            { id: "cbKyb2Qf7d4", title: "10分鐘站立式腹肌運動", channel: "Growingannanas" },
+            { id: "IT94xC35u6k", title: "20分鐘全身燃脂 (無深蹲)", channel: "MadFit" },
+            { id: "8xX2n0sK6hE", title: "15分鐘瘦大腿內外側", channel: "Coffee林芊妤" },
+            { id: "3p8EBPVZ2Iw", title: "30分鐘 K-POP 燃脂舞", channel: "Fit Dance" }
+        ];
+
+        // 隨機洗牌演算法
+        function shuffleArray(array) {
+            const newArr = [...array];
+            for (let i = newArr.length - 1; i > 0; i--) {
+                const j = Math.floor(Math.random() * (i + 1));
+                [newArr[i], newArr[j]] = [newArr[j], newArr[i]];
+            }
+            return newArr;
+        }
+
+        // 渲染影片到畫面
+        function renderRandomVideos() {
+            const container = document.getElementById('video-container');
+            
+            // 隨機選取 3 個
+            const shuffled = shuffleArray(videoPool);
+            const selectedVideos = shuffled.slice(0, 3);
+
+            // 產生 HTML
+            let htmlContent = '';
+            
+            selectedVideos.forEach((video, index) => {
+                htmlContent += `
+                    <div class="video-card bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden mb-6">
+                        <!-- 標題區 -->
+                        <div class="p-3 flex justify-between items-start bg-gray-50">
+                            <div>
+                                <span class="inline-block bg-teal-100 text-teal-800 text-xs px-2 py-0.5 rounded-full font-semibold mb-1">
+                                    推薦 #${index + 1}
+                                </span>
+                                <h3 class="font-bold text-gray-800 leading-tight text-sm">${video.title}</h3>
+                                <p class="text-xs text-gray-500 mt-1">頻道：${video.channel}</p>
+                            </div>
+                        </div>
+
+                        <!-- 嵌入式播放器容器 (維持 16:9 比例) -->
+                        <div class="relative w-full aspect-video bg-black group">
+                            <iframe 
+                                class="absolute top-0 left-0 w-full h-full"
+                                src="https://www.youtube.com/embed/${video.id}?rel=0&modestbranding=1&playsinline=1" 
+                                title="${video.title}"
+                                frameborder="0" 
+                                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" 
+                                allowfullscreen>
+                            </iframe>
+                        </div>
+                        
+                        <!-- 救援按鈕：如果播放失敗，點這裡 -->
+                        <div class="bg-gray-50 p-2 text-center border-t border-gray-100">
+                             <a href="https://www.youtube.com/watch?v=${video.id}" target="_blank" class="text-xs text-gray-400 hover:text-teal-600 flex items-center justify-center gap-1 transition-colors">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                                </svg>
+                                播放有問題？點此至 YouTube 觀看
+                            </a>
+                        </div>
+                    </div>
+                `;
+            });
+
+            // 加上底部提示
+            htmlContent += `
+                <div class="text-center text-gray-400 text-xs pb-2">
+                    - 已顯示 3 部隨機影片 -
+                </div>
+            `;
+
+            // 更新 DOM
+            container.style.opacity = '0';
+            setTimeout(() => {
+                container.innerHTML = htmlContent;
+                container.style.transition = 'opacity 0.3s ease-in';
+                container.style.opacity = '1';
+            }, 200);
+        }
+
+        window.onload = renderRandomVideos;
+    </script>
+</body>
+</html>

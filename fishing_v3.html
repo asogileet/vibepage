@@ -1,0 +1,287 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Fishing Mobile V3</title>
+    <style>
+        body {
+            margin: 0;
+            overflow: hidden;
+            background: #87CEEB;
+            touch-action: none; /* Crucial for mobile */
+            font-family: sans-serif;
+        }
+        canvas {
+            display: block;
+            touch-action: none;
+        }
+        #ui {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            pointer-events: none;
+            color: white;
+            font-size: 16px;
+            font-weight: bold;
+            text-shadow: 1px 1px 2px black;
+        }
+        #overlay {
+            position: absolute;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.7);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            color: white;
+            font-size: 24px;
+            z-index: 100;
+            flex-direction: column;
+        }
+        #debug {
+            position: absolute;
+            bottom: 10px;
+            left: 10px;
+            color: yellow;
+            font-family: monospace;
+            font-size: 12px;
+            pointer-events: none;
+        }
+    </style>
+</head>
+<body>
+
+    <div id="ui">
+        Score: <span id="score">0</span>
+    </div>
+
+    <!-- Debug info to see if touch works -->
+    <div id="debug">Debug: Waiting input...</div>
+
+    <div id="overlay" onclick="startGame()">
+        <div>Tap to Start</div>
+        <div style="font-size:14px; margin-top:10px; color:#ccc;">(Mobile V3)</div>
+    </div>
+
+    <canvas id="gameCanvas"></canvas>
+
+    <script>
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        const debugEl = document.getElementById('debug');
+        const scoreEl = document.getElementById('score');
+        const overlay = document.getElementById('overlay');
+
+        let width, height;
+        let gameRunning = false;
+        let score = 0;
+        let boatX = 0;
+
+        // Resize
+        function resize() {
+            width = window.innerWidth;
+            height = window.innerHeight;
+            canvas.width = width;
+            canvas.height = height;
+            if(!gameRunning) boatX = width / 2;
+        }
+        window.addEventListener('resize', resize);
+        resize();
+
+        // Game State
+        const HOOK_IDLE = 0;
+        const HOOK_DROPPING = 1;
+        const HOOK_REELING = 2;
+        
+        const hook = {
+            x: 0,
+            y: 100,
+            state: HOOK_IDLE,
+            speed: 8,
+            caughtFish: null
+        };
+
+        const fishes = [];
+        let frameCount = 0;
+
+        // Input Handling
+        function updateBoat(x) {
+            if (hook.state === HOOK_IDLE) {
+                boatX = x;
+                // Clamp
+                if (boatX < 30) boatX = 30;
+                if (boatX > width - 30) boatX = width - 30;
+            }
+            debugEl.innerText = `Input X: ${Math.round(x)}`;
+        }
+
+        function dropHook() {
+            if (hook.state === HOOK_IDLE) {
+                hook.state = HOOK_DROPPING;
+                hook.x = boatX;
+            }
+        }
+
+        function startGame() {
+            overlay.style.display = 'none';
+            gameRunning = true;
+            resize(); // Force resize check
+            update();
+        }
+
+        // --- Event Listeners (Direct binding) ---
+        
+        // Touch
+        canvas.addEventListener('touchstart', (e) => {
+            e.preventDefault();
+            const touch = e.touches[0];
+            updateBoat(touch.clientX);
+            dropHook(); // Tap to drop
+        }, { passive: false });
+
+        canvas.addEventListener('touchmove', (e) => {
+            e.preventDefault();
+            const touch = e.touches[0];
+            updateBoat(touch.clientX);
+        }, { passive: false });
+
+        // Mouse
+        canvas.addEventListener('mousedown', (e) => {
+            updateBoat(e.clientX);
+            dropHook();
+        });
+        canvas.addEventListener('mousemove', (e) => {
+            updateBoat(e.clientX);
+        });
+
+        // Game Logic
+        const fishTypes = [
+            { color: 'orange', speed: 2, score: 10, size: 20 },
+            { color: 'blue', speed: 3, score: 20, size: 25 },
+            { color: 'gold', speed: 5, score: 50, size: 15 },
+            { color: 'brown', speed: 1, score: 0, size: 30, isTrash: true } // Boot
+        ];
+
+        function spawnFish() {
+            const type = fishTypes[Math.floor(Math.random() * fishTypes.length)];
+            const isLeft = Math.random() > 0.5;
+            fishes.push({
+                x: isLeft ? -50 : width + 50,
+                y: 150 + Math.random() * (height - 200),
+                vx: isLeft ? type.speed : -type.speed,
+                type: type
+            });
+        }
+
+        function update() {
+            if (!gameRunning) return;
+            frameCount++;
+
+            if (frameCount % 60 === 0) spawnFish();
+
+            // Hook Logic
+            if (hook.state === HOOK_IDLE) {
+                hook.x = boatX;
+                hook.y = 120;
+            } else if (hook.state === HOOK_DROPPING) {
+                hook.y += hook.speed;
+                if (hook.y > height) hook.state = HOOK_REELING;
+            } else if (hook.state === HOOK_REELING) {
+                hook.y -= hook.speed;
+                if (hook.y <= 120) {
+                    if (hook.caughtFish) {
+                        score += hook.caughtFish.type.score;
+                        scoreEl.innerText = score;
+                        hook.caughtFish = null;
+                    }
+                    hook.state = HOOK_IDLE;
+                }
+            }
+
+            // Fish Logic
+            for (let i = fishes.length - 1; i >= 0; i--) {
+                let f = fishes[i];
+                f.x += f.vx;
+                
+                // Remove if out of screen
+                if (f.x < -100 || f.x > width + 100) {
+                    fishes.splice(i, 1);
+                    continue;
+                }
+
+                // Collision
+                if (hook.state === HOOK_DROPPING && !hook.caughtFish) {
+                    const dist = Math.hypot(hook.x - f.x, hook.y - f.y);
+                    if (dist < f.type.size + 10) {
+                        hook.state = HOOK_REELING;
+                        hook.caughtFish = f;
+                        fishes.splice(i, 1);
+                    }
+                }
+            }
+
+            render();
+            requestAnimationFrame(update);
+        }
+
+        function render() {
+            ctx.clearRect(0, 0, width, height);
+
+            // Water
+            ctx.fillStyle = "#1E90FF";
+            ctx.fillRect(0, 100, width, height - 100);
+            
+            // Sky
+            ctx.fillStyle = "#87CEEB";
+            ctx.fillRect(0, 0, width, 100);
+
+            // Line
+            ctx.beginPath();
+            ctx.moveTo(hook.x, 100);
+            ctx.lineTo(hook.x, hook.y);
+            ctx.strokeStyle = "black";
+            ctx.lineWidth = 2;
+            ctx.stroke();
+
+            // Hook
+            ctx.beginPath();
+            ctx.arc(hook.x, hook.y, 5, 0, Math.PI);
+            ctx.stroke();
+
+            // Caught Fish
+            if (hook.caughtFish) drawFish(hook.caughtFish, hook.x, hook.y + 10, true);
+
+            // Swimming Fishes
+            fishes.forEach(f => drawFish(f, f.x, f.y, false));
+
+            // Boat
+            ctx.fillStyle = "#8B4513";
+            ctx.beginPath();
+            ctx.arc(boatX, 90, 40, 0, Math.PI, true); // Hull
+            ctx.fill();
+            ctx.fillStyle = "white"; // Sail
+            ctx.beginPath();
+            ctx.moveTo(boatX, 90);
+            ctx.lineTo(boatX, 40);
+            ctx.lineTo(boatX + 30, 90);
+            ctx.fill();
+        }
+
+        function drawFish(f, x, y, caught) {
+            ctx.save();
+            ctx.translate(x, y);
+            if (caught) ctx.rotate(Math.PI / 2);
+            
+            ctx.fillStyle = f.type.color;
+            if (f.type.isTrash) {
+                ctx.fillRect(-10, -10, 20, 25); // Boot
+            } else {
+                ctx.beginPath();
+                ctx.ellipse(0, 0, f.type.size, f.type.size/2, 0, 0, Math.PI*2);
+                ctx.fill();
+            }
+            ctx.restore();
+        }
+    </script>
+</body>
+</html>

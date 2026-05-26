@@ -1,0 +1,307 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>新春接金元寶</title>
+    <style>
+        body {
+            margin: 0;
+            overflow: hidden;
+            background-color: #800000; /* 深紅背景 */
+            font-family: 'Microsoft JhengHei', sans-serif;
+            touch-action: none;
+        }
+        canvas {
+            display: block;
+            touch-action: none;
+        }
+        #ui {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            pointer-events: none;
+            color: #FFD700; /* 金色字 */
+            text-shadow: 2px 2px 0 #000;
+        }
+        h1 { margin: 0; font-size: 24px; }
+        #score { font-size: 32px; font-weight: bold; }
+        
+        #startScreen {
+            position: absolute;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(139, 0, 0, 0.9);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            color: #FFD700;
+            z-index: 100;
+            text-align: center;
+        }
+        button {
+            background: #FFD700;
+            color: #800000;
+            border: 2px solid #FF4500;
+            padding: 15px 40px;
+            font-size: 24px;
+            font-weight: bold;
+            border-radius: 50px;
+            margin-top: 30px;
+            cursor: pointer;
+            box-shadow: 0 5px 0 #b8860b;
+        }
+        button:active {
+            transform: translateY(4px);
+            box-shadow: 0 0 0 #b8860b;
+        }
+    </style>
+</head>
+<body>
+
+    <div id="ui">
+        <h1>🧧 新春接財神</h1>
+        <div>財富: <span id="score">0</span></div>
+    </div>
+
+    <div id="startScreen">
+        <h1 style="font-size: 40px; margin-bottom: 10px;">恭喜發財</h1>
+        <p style="font-size: 18px; color: #fff;">左右移動接元寶，小心鞭炮！</p>
+        <button onclick="startGame()">開始接財</button>
+    </div>
+
+    <canvas id="gameCanvas"></canvas>
+
+    <script>
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        const scoreEl = document.getElementById('score');
+        const startScreen = document.getElementById('startScreen');
+
+        let width, height;
+        let gameRunning = false;
+        let score = 0;
+        let playerX = 0;
+        let frameCount = 0;
+        
+        // 物品陣列
+        const items = [];
+        const particles = []; // 爆炸特效
+
+        function resize() {
+            width = window.innerWidth;
+            height = window.innerHeight;
+            canvas.width = width;
+            canvas.height = height;
+            if(!gameRunning) playerX = width / 2;
+        }
+        window.addEventListener('resize', resize);
+        resize();
+
+        // --- 輸入控制 (沿用 v3 穩定版) ---
+        function updatePlayer(x) {
+            playerX = x;
+            if (playerX < 40) playerX = 40;
+            if (playerX > width - 40) playerX = width - 40;
+        }
+
+        // 觸控
+        canvas.addEventListener('touchstart', e => {
+            e.preventDefault();
+            updatePlayer(e.touches[0].clientX);
+        }, { passive: false });
+        canvas.addEventListener('touchmove', e => {
+            e.preventDefault();
+            updatePlayer(e.touches[0].clientX);
+        }, { passive: false });
+        
+        // 滑鼠
+        canvas.addEventListener('mousemove', e => {
+            updatePlayer(e.clientX);
+        });
+
+        function startGame() {
+            startScreen.style.display = 'none';
+            score = 0;
+            scoreEl.innerText = 0;
+            items.length = 0;
+            particles.length = 0;
+            gameRunning = true;
+            loop();
+        }
+
+        function spawnItem() {
+            const r = Math.random();
+            let type;
+            // 60% 元寶, 30% 紅包, 10% 鞭炮
+            if (r < 0.6) type = 'gold'; 
+            else if (r < 0.9) type = 'redpacket'; 
+            else type = 'bomb';
+
+            items.push({
+                x: Math.random() * (width - 40) + 20,
+                y: -50,
+                speed: Math.random() * 3 + 3 + (score * 0.02), // 越玩越快
+                type: type,
+                rotation: Math.random() * Math.PI,
+                rotSpeed: (Math.random() - 0.5) * 0.1
+            });
+        }
+
+        function createExplosion(x, y, color) {
+            for(let i=0; i<10; i++) {
+                particles.push({
+                    x: x, y: y,
+                    vx: (Math.random() - 0.5) * 10,
+                    vy: (Math.random() - 0.5) * 10,
+                    life: 20,
+                    color: color
+                });
+            }
+        }
+
+        function loop() {
+            if (!gameRunning) return;
+            
+            ctx.clearRect(0, 0, width, height);
+            
+            // 畫背景 (喜氣的雲紋)
+            ctx.fillStyle = "#8B0000"; // Dark Red
+            ctx.fillRect(0, 0, width, height);
+            ctx.fillStyle = "#A52A2A"; // Lighter
+            for(let i=0; i<height; i+=100) {
+                ctx.beginPath();
+                ctx.arc(width/2, i + (frameCount%100), 20, 0, Math.PI*2);
+                ctx.fill();
+            }
+
+            frameCount++;
+            if (frameCount % 40 === 0) spawnItem();
+
+            // 更新物品
+            for (let i = items.length - 1; i >= 0; i--) {
+                let item = items[i];
+                item.y += item.speed;
+                item.rotation += item.rotSpeed;
+
+                // 沒接到
+                if (item.y > height) {
+                    items.splice(i, 1);
+                    continue;
+                }
+
+                // 碰撞判定 (聚寶盆)
+                // 聚寶盆位置: playerX, height - 80
+                // 簡單判定: 距離夠近
+                const distX = Math.abs(item.x - playerX);
+                const distY = Math.abs(item.y - (height - 80));
+
+                if (distX < 50 && distY < 40) {
+                    if (item.type === 'bomb') {
+                        // 炸到！扣分或結束
+                        createExplosion(item.x, item.y, 'black');
+                        score -= 20;
+                        if(score < 0) score = 0;
+                        // 震動特效 (畫面晃一下)
+                        ctx.translate(Math.random()*10, Math.random()*10); 
+                    } else if (item.type === 'gold') {
+                        score += 10;
+                        createExplosion(item.x, item.y, 'gold');
+                    } else if (item.type === 'redpacket') {
+                        score += 5;
+                        createExplosion(item.x, item.y, 'red');
+                    }
+                    scoreEl.innerText = score;
+                    items.splice(i, 1);
+                    // Reset matrix after shake
+                    ctx.setTransform(1, 0, 0, 1, 0, 0); 
+                }
+            }
+
+            // 畫物品
+            items.forEach(item => {
+                ctx.save();
+                ctx.translate(item.x, item.y);
+                ctx.rotate(item.rotation);
+
+                if (item.type === 'gold') {
+                    // 畫元寶
+                    ctx.fillStyle = '#FFD700'; // 金色
+                    ctx.beginPath();
+                    ctx.ellipse(0, 10, 20, 10, 0, 0, Math.PI*2); // 底座
+                    ctx.fill();
+                    ctx.beginPath(); // 頂部凸起
+                    ctx.moveTo(-15, 10);
+                    ctx.quadraticCurveTo(0, -10, 15, 10);
+                    ctx.fill();
+                    // 閃光
+                    ctx.fillStyle = '#FFFACD';
+                    ctx.beginPath();
+                    ctx.arc(-5, 5, 3, 0, Math.PI*2);
+                    ctx.fill();
+                } else if (item.type === 'redpacket') {
+                    // 畫紅包
+                    ctx.fillStyle = '#DC143C';
+                    ctx.fillRect(-15, -20, 30, 40);
+                    ctx.fillStyle = '#FFD700';
+                    ctx.fillRect(-5, -20, 10, 40); // 金條
+                    ctx.font = '20px Arial';
+                    ctx.fillText('福', -10, 8);
+                } else if (item.type === 'bomb') {
+                    // 畫鞭炮
+                    ctx.fillStyle = '#B22222';
+                    ctx.fillRect(-10, -20, 20, 40);
+                    ctx.fillStyle = 'black';
+                    ctx.beginPath(); // 引線
+                    ctx.moveTo(0, -20);
+                    ctx.lineTo(5, -30);
+                    ctx.stroke();
+                    ctx.font = '24px Arial';
+                    ctx.fillStyle = '#FFD700';
+                    ctx.fillText('🧨', -12, 10);
+                }
+                ctx.restore();
+            });
+
+            // 畫特效粒子
+            for(let i=particles.length-1; i>=0; i--) {
+                let p = particles[i];
+                p.x += p.vx;
+                p.y += p.vy;
+                p.life--;
+                ctx.fillStyle = p.color;
+                ctx.globalAlpha = p.life / 20;
+                ctx.beginPath();
+                ctx.arc(p.x, p.y, 3, 0, Math.PI*2);
+                ctx.fill();
+                ctx.globalAlpha = 1;
+                if(p.life <= 0) particles.splice(i, 1);
+            }
+
+            // 畫玩家 (聚寶盆)
+            ctx.save();
+            ctx.translate(playerX, height - 80);
+            
+            // 盆子
+            ctx.fillStyle = '#B8860B'; // 暗金
+            ctx.beginPath();
+            ctx.arc(0, 0, 40, 0, Math.PI, false); // 半圓
+            ctx.fill();
+            // 邊緣
+            ctx.fillStyle = '#FFD700'; // 亮金
+            ctx.beginPath();
+            ctx.ellipse(0, 0, 40, 10, 0, 0, Math.PI*2);
+            ctx.fill();
+            // 上面的字
+            ctx.fillStyle = '#8B0000';
+            ctx.font = 'bold 20px sans-serif';
+            ctx.textAlign = 'center';
+            ctx.fillText('招財', 0, 30);
+            
+            ctx.restore();
+
+            requestAnimationFrame(loop);
+        }
+    </script>
+</body>
+</html>

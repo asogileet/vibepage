@@ -1,0 +1,315 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>悠閒釣魚 (Happy Fishing)</title>
+    <style>
+        body {
+            margin: 0;
+            overflow: hidden;
+            background: linear-gradient(to bottom, #87CEEB 0%, #1E90FF 100%);
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            user-select: none;
+            /* 關鍵修正：禁止瀏覽器預設的觸控行為 (如捲動、縮放) */
+            touch-action: none; 
+        }
+        canvas {
+            display: block;
+            touch-action: none; /* 確保 Canvas 也不會觸發捲動 */
+        }
+        #ui {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            pointer-events: none;
+            color: white;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.5);
+        }
+        h1 { margin: 0; font-size: 28px; }
+        p { margin: 5px 0; font-size: 18px; }
+        #score { font-weight: bold; color: #FFD700; font-size: 24px; }
+        
+        #message {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            text-align: center;
+            background: rgba(255, 255, 255, 0.9);
+            padding: 30px;
+            border-radius: 15px;
+            box-shadow: 0 10px 20px rgba(0,0,0,0.3);
+            display: none;
+            color: #333;
+            z-index: 100;
+        }
+        button {
+            background: #1E90FF;
+            color: white;
+            border: none;
+            padding: 15px 40px; /* 按鈕大一點比較好按 */
+            font-size: 20px;
+            border-radius: 50px;
+            cursor: pointer;
+            margin-top: 15px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            touch-action: manipulation; /* 允許按鈕點擊 */
+        }
+        button:hover { background: #0077EA; }
+    </style>
+</head>
+<body>
+
+    <div id="ui">
+        <h1>🎣 悠閒釣魚</h1>
+        <p>分數: <span id="score">0</span></p>
+        <p style="font-size: 14px; opacity: 0.9;">手指左右滑動控制船，點擊下鉤！</p>
+    </div>
+
+    <canvas id="gameCanvas"></canvas>
+
+    <div id="message">
+        <h2 id="msgTitle">恭喜！</h2>
+        <p id="msgText">你釣到了稀有的大魚！</p>
+        <button onclick="resetGame()">繼續釣魚</button>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        const scoreEl = document.getElementById('score');
+        const msgEl = document.getElementById('message');
+        
+        let width, height;
+        let score = 0;
+        let boatX = 0;
+        
+        const HOOK_IDLE = 0;
+        const HOOK_DROPPING = 1;
+        const HOOK_REELING = 2;
+        
+        const hook = {
+            x: 0,
+            y: 100,
+            state: HOOK_IDLE,
+            speed: 8, // 稍微加快一點節奏
+            caughtFish: null
+        };
+
+        const fishes = [];
+        const bubbles = [];
+        let frameCount = 0;
+
+        const fishTypes = [
+            { name: '小丑魚', score: 10, color: '#FF7F50', speed: 2, size: 20 },
+            { name: '藍倒吊', score: 20, color: '#4169E1', speed: 3, size: 25 },
+            { name: '黃金魚', score: 50, color: '#FFD700', speed: 5, size: 15 },
+            { name: '大鮪魚', score: 30, color: '#708090', speed: 1.5, size: 40 },
+            { name: '靴子', score: 0, color: '#8B4513', speed: 1, size: 30, type: 'trash' }
+        ];
+
+        function resize() {
+            width = window.innerWidth;
+            height = window.innerHeight;
+            canvas.width = width;
+            canvas.height = height;
+            boatX = width / 2;
+        }
+        window.addEventListener('resize', resize);
+        resize();
+
+        // --- 輸入處理 ---
+
+        function handleInputMove(clientX) {
+            if (hook.state === HOOK_IDLE) {
+                boatX = clientX;
+                if (boatX < 50) boatX = 50;
+                if (boatX > width - 50) boatX = width - 50;
+            }
+        }
+
+        function handleInputStart(clientX) {
+             // 1. 先把船移過來
+             handleInputMove(clientX);
+             
+             // 2. 如果是閒置狀態，就下鉤
+            if (hook.state === HOOK_IDLE) {
+                hook.state = HOOK_DROPPING;
+                hook.x = boatX;
+            }
+        }
+
+        // 滑鼠
+        window.addEventListener('mousemove', e => handleInputMove(e.clientX));
+        window.addEventListener('mousedown', (e) => {
+            if (e.target.tagName === 'BUTTON') return;
+            handleInputStart(e.clientX);
+        });
+
+        // 手機觸控
+        window.addEventListener('touchmove', e => {
+            e.preventDefault(); // 絕對禁止捲動
+            handleInputMove(e.touches[0].clientX);
+        }, { passive: false });
+
+        window.addEventListener('touchstart', e => {
+            if (e.target.tagName === 'BUTTON') return;
+            e.preventDefault(); // 絕對禁止長按選單/縮放
+            handleInputStart(e.touches[0].clientX);
+        }, { passive: false });
+
+
+        // --- 遊戲邏輯 ---
+
+        function spawnFish() {
+            const type = fishTypes[Math.floor(Math.random() * fishTypes.length)];
+            const isLeft = Math.random() > 0.5;
+            const y = height * 0.3 + Math.random() * (height * 0.6);
+            fishes.push({
+                x: isLeft ? -50 : width + 50,
+                y: y,
+                vx: isLeft ? type.speed : -type.speed,
+                type: type,
+                facingLeft: !isLeft,
+                wobble: Math.random() * Math.PI * 2
+            });
+        }
+
+        function spawnBubble() {
+            bubbles.push({
+                x: Math.random() * width,
+                y: height + 10,
+                size: Math.random() * 5 + 2,
+                speed: Math.random() * 1 + 0.5
+            });
+        }
+
+        function update() {
+            frameCount++;
+            if (frameCount % 60 === 0) spawnFish();
+            if (frameCount % 20 === 0) spawnBubble();
+
+            // Bubbles
+            for (let i = bubbles.length - 1; i >= 0; i--) {
+                bubbles[i].y -= bubbles[i].speed;
+                if (bubbles[i].y < -10) bubbles.splice(i, 1);
+            }
+
+            // Hook
+            if (hook.state === HOOK_IDLE) {
+                hook.x = boatX;
+                hook.y = 120;
+            } else if (hook.state === HOOK_DROPPING) {
+                hook.y += hook.speed;
+                if (hook.y > height) hook.state = HOOK_REELING;
+            } else if (hook.state === HOOK_REELING) {
+                hook.y -= hook.speed;
+                if (hook.y <= 120) {
+                    if (hook.caughtFish) {
+                        score += hook.caughtFish.type.score;
+                        scoreEl.innerText = score;
+                        hook.caughtFish = null;
+                    }
+                    hook.state = HOOK_IDLE;
+                }
+            }
+
+            // Fishes
+            for (let i = fishes.length - 1; i >= 0; i--) {
+                let f = fishes[i];
+                f.x += f.vx;
+                f.wobble += 0.1;
+                
+                if ((f.vx > 0 && f.x > width + 100) || (f.vx < 0 && f.x < -100)) {
+                    fishes.splice(i, 1);
+                    continue;
+                }
+
+                if (hook.state === HOOK_DROPPING && !hook.caughtFish) {
+                    const dist = Math.hypot(hook.x - f.x, hook.y - f.y);
+                    if (dist < f.type.size + 15) {
+                        hook.state = HOOK_REELING;
+                        hook.caughtFish = f;
+                        fishes.splice(i, 1);
+                    }
+                }
+            }
+
+            requestAnimationFrame(render);
+        }
+
+        function render() {
+            ctx.clearRect(0, 0, width, height);
+
+            // Water Line
+            ctx.fillStyle = "rgba(255, 255, 255, 0.3)";
+            ctx.fillRect(0, 100, width, 5);
+
+            // Bubbles
+            ctx.fillStyle = "rgba(255, 255, 255, 0.5)";
+            bubbles.forEach(b => {
+                ctx.beginPath(); ctx.arc(b.x, b.y, b.size, 0, Math.PI*2); ctx.fill();
+            });
+
+            // Line
+            ctx.beginPath();
+            ctx.moveTo(hook.x, 100);
+            ctx.lineTo(hook.x, hook.y);
+            ctx.strokeStyle = "rgba(0,0,0,0.5)"; ctx.lineWidth = 2; ctx.stroke();
+
+            // Hook
+            ctx.beginPath();
+            ctx.arc(hook.x, hook.y, 5, 0, Math.PI, false);
+            ctx.strokeStyle = "black"; ctx.stroke();
+
+            // Caught Fish
+            if (hook.caughtFish) drawFish(ctx, hook.x, hook.y + 10, hook.caughtFish.type, true);
+
+            // Fishes
+            fishes.forEach(f => {
+                const offsetY = Math.sin(f.wobble) * 5;
+                drawFish(ctx, f.x, f.y + offsetY, f.type, false, f.facingLeft);
+            });
+
+            // Boat
+            ctx.fillStyle = "#8B4513";
+            ctx.beginPath(); ctx.arc(boatX, 80, 50, 0, Math.PI, false); ctx.fill();
+            // Fisherman
+            ctx.fillStyle = "#FFCC99";
+            ctx.beginPath(); ctx.arc(boatX + 10, 70, 10, 0, Math.PI*2); ctx.fill();
+        }
+
+        function drawFish(ctx, x, y, type, isCaught, facingLeft) {
+            ctx.save();
+            ctx.translate(x, y);
+            if (isCaught) ctx.rotate(Math.PI / 2);
+            else if (facingLeft) ctx.scale(-1, 1);
+
+            ctx.fillStyle = type.color;
+            if (type.type === 'trash') {
+                ctx.fillRect(-10, -10, 20, 30);
+                ctx.fillRect(-10, 10, 35, 15);
+            } else {
+                ctx.beginPath();
+                ctx.ellipse(0, 0, type.size, type.size / 2, 0, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.beginPath();
+                ctx.moveTo(-type.size + 5, 0);
+                ctx.lineTo(-type.size - 10, -10);
+                ctx.lineTo(-type.size - 10, 10);
+                ctx.fill();
+                ctx.fillStyle = "white"; ctx.beginPath(); ctx.arc(type.size/2, -5, 3, 0, Math.PI*2); ctx.fill();
+                ctx.fillStyle = "black"; ctx.beginPath(); ctx.arc(type.size/2+1, -5, 1, 0, Math.PI*2); ctx.fill();
+            }
+            ctx.restore();
+        }
+
+        function resetGame() {
+            msgEl.style.display = 'none';
+        }
+
+        requestAnimationFrame(update);
+    </script>
+</body>
+</html>

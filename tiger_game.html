@@ -1,0 +1,338 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>老虎吃肉 (Tiger Feast)</title>
+    <style>
+        body {
+            margin: 0;
+            overflow: hidden;
+            background-color: #2E8B57; /* 森林綠 */
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            user-select: none;
+            touch-action: none; /* 禁止瀏覽器預設觸控行為 */
+        }
+        #gameCanvas {
+            display: block;
+            background: radial-gradient(circle, #3CB371 0%, #006400 100%);
+        }
+        #ui {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            pointer-events: none;
+            color: white;
+            text-shadow: 2px 2px 2px black;
+        }
+        h1 { margin: 0; font-size: 28px; color: #FFA500; }
+        p { margin: 5px 0; font-size: 18px; }
+        #score { font-weight: bold; color: #FFD700; font-size: 24px; }
+        
+        #gameOver {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            text-align: center;
+            background: rgba(0, 0, 0, 0.85);
+            padding: 40px;
+            border-radius: 15px;
+            display: none;
+            border: 4px solid #FFA500;
+            color: white;
+            min-width: 250px;
+        }
+        button {
+            background: #FFA500;
+            color: black;
+            border: none;
+            padding: 15px 30px;
+            font-size: 20px;
+            border-radius: 50px;
+            cursor: pointer;
+            margin-top: 20px;
+            font-weight: bold;
+            box-shadow: 0 4px 0 #cc8400;
+        }
+        button:active {
+            transform: translateY(4px);
+            box-shadow: 0 0 0 #cc8400;
+        }
+    </style>
+</head>
+<body>
+
+    <div id="ui">
+        <h1>🐯 老虎吃肉</h1>
+        <p>吃了: <span id="score">0</span> 塊肉</p>
+    </div>
+
+    <canvas id="gameCanvas"></canvas>
+
+    <div id="gameOver">
+        <h2 style="color: #FF4500; font-size: 32px; margin-bottom: 10px;">燙到了! 🔥</h2>
+        <p>你吃了 <span id="finalScore">0</span> 塊肉</p>
+        <button onclick="resetGame()">再吃一次</button>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        const scoreEl = document.getElementById('score');
+        const finalScoreEl = document.getElementById('finalScore');
+        const gameOverEl = document.getElementById('gameOver');
+
+        let width, height;
+        let score = 0;
+        let gameRunning = true;
+        let frameCount = 0;
+
+        // 老虎
+        const player = {
+            x: 0,
+            y: 0,
+            size: 60,
+            speed: 0.15,
+            rotation: 0,
+            targetRotation: 0
+        };
+
+        const target = { x: 0, y: 0 }; // 滑鼠/觸控目標
+        const meats = [];
+        const fires = [];
+        const effects = []; // 特效文字 (ROAR!)
+
+        function resize() {
+            width = window.innerWidth;
+            height = window.innerHeight;
+            canvas.width = width;
+            canvas.height = height;
+        }
+        window.addEventListener('resize', resize);
+        resize();
+
+        // 初始位置
+        player.x = width / 2;
+        player.y = height / 2;
+        target.x = width / 2;
+        target.y = height / 2;
+
+        // 電腦滑鼠
+        window.addEventListener('mousemove', e => {
+            target.x = e.clientX;
+            target.y = e.clientY;
+        });
+
+        // 手機觸控
+        window.addEventListener('touchmove', e => {
+            e.preventDefault();
+            target.x = e.touches[0].clientX;
+            target.y = e.touches[0].clientY;
+        }, { passive: false });
+        
+        window.addEventListener('touchstart', e => {
+            e.preventDefault();
+            target.x = e.touches[0].clientX;
+            target.y = e.touches[0].clientY;
+        }, { passive: false });
+
+        function spawnMeat() {
+            const margin = 50;
+            const x = margin + Math.random() * (width - margin * 2);
+            const y = margin + Math.random() * (height - margin * 2);
+            meats.push({ x, y, size: 40, bounce: 0 });
+        }
+
+        function spawnFire() {
+            const size = 40;
+            let x, y;
+            // 從邊緣生成
+            if (Math.random() < 0.5) {
+                x = Math.random() < 0.5 ? -size : width + size;
+                y = Math.random() * height;
+            } else {
+                x = Math.random() * width;
+                y = Math.random() < 0.5 ? -size : height + size;
+            }
+
+            // 隨機方向穿越畫面
+            const angle = Math.atan2(height/2 - y + (Math.random()-0.5)*200, width/2 - x + (Math.random()-0.5)*200);
+            const speed = 3 + Math.random() * 3 + (score * 0.1); // 分數越高火越快
+            
+            fires.push({
+                x, y, size,
+                vx: Math.cos(angle) * speed,
+                vy: Math.sin(angle) * speed,
+                angle: angle
+            });
+        }
+
+        function addEffect(text, x, y) {
+            effects.push({
+                text, x, y,
+                life: 30, // 持續 30 幀
+                vy: -2 // 向上飄
+            });
+        }
+
+        function update() {
+            if (!gameRunning) return;
+            frameCount++;
+
+            // 老虎移動 (平滑跟隨)
+            const dx = target.x - player.x;
+            const dy = target.y - player.y;
+            player.x += dx * player.speed;
+            player.y += dy * player.speed;
+
+            // 計算面向角度
+            if (Math.abs(dx) > 1 || Math.abs(dy) > 1) {
+                player.targetRotation = Math.atan2(dy, dx);
+            }
+            // 角度平滑插值 (處理 -PI 到 PI 的跳躍)
+            let diff = player.targetRotation - player.rotation;
+            while (diff < -Math.PI) diff += Math.PI * 2;
+            while (diff > Math.PI) diff -= Math.PI * 2;
+            player.rotation += diff * 0.2;
+
+            // 生成物品
+            if (meats.length < 3 && frameCount % 60 === 0) spawnMeat();
+            
+            let fireRate = 60;
+            if (score > 10) fireRate = 45;
+            if (score > 20) fireRate = 30;
+            if (frameCount % fireRate === 0) spawnFire();
+
+            // 檢查吃肉
+            for (let i = meats.length - 1; i >= 0; i--) {
+                const m = meats[i];
+                m.bounce = Math.sin(frameCount * 0.2) * 5; // 肉會跳動
+                
+                const dist = Math.hypot(player.x - m.x, player.y - m.y);
+                if (dist < player.size/2 + m.size/2) {
+                    score++;
+                    scoreEl.innerText = score;
+                    meats.splice(i, 1);
+                    addEffect("ROAR!", player.x, player.y - 30);
+                    // 偶爾加個讚賞
+                    if(score % 5 === 0) addEffect("YUMMY!", player.x, player.y - 60);
+                }
+            }
+
+            // 檢查火焰
+            for (let i = fires.length - 1; i >= 0; i--) {
+                const f = fires[i];
+                f.x += f.vx;
+                f.y += f.vy;
+                f.angle += 0.1; // 自轉
+
+                // 出界移除
+                if (f.x < -100 || f.x > width + 100 || f.y < -100 || f.y > height + 100) {
+                    fires.splice(i, 1);
+                    continue;
+                }
+
+                // 碰撞
+                const dist = Math.hypot(player.x - f.x, player.y - f.y);
+                if (dist < player.size/3 + f.size/3) { // 判定核心
+                    gameOver();
+                }
+            }
+
+            // 更新特效
+            for (let i = effects.length - 1; i >= 0; i--) {
+                const e = effects[i];
+                e.y += e.vy;
+                e.life--;
+                if (e.life <= 0) effects.splice(i, 1);
+            }
+
+            requestAnimationFrame(render);
+        }
+
+        function render() {
+            ctx.clearRect(0, 0, width, height);
+
+            // 畫肉
+            ctx.font = '40px Arial';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            meats.forEach(m => {
+                ctx.fillText('🍖', m.x, m.y + m.bounce);
+            });
+
+            // 畫火焰
+            fires.forEach(f => {
+                ctx.save();
+                ctx.translate(f.x, f.y);
+                ctx.rotate(f.angle);
+                ctx.font = '40px Arial';
+                ctx.fillText('🔥', 0, 0);
+                ctx.restore();
+            });
+
+            // 畫老虎
+            ctx.save();
+            ctx.translate(player.x, player.y);
+            
+            // 翻轉老虎頭部，讓它不至於上下顛倒
+            let renderRot = player.rotation;
+            if (renderRot > Math.PI/2 || renderRot < -Math.PI/2) {
+               ctx.scale(1, -1); // 垂直翻轉修正
+               ctx.rotate(-renderRot); // 反向旋轉修正視覺
+               // 其實簡單的 emoji 旋轉有點難搞，我們用簡單的翻轉就好
+               // 簡單方案：如果向左走，水平翻轉
+            }
+            
+            ctx.restore();
+
+            // 簡單版繪製：只根據左右翻轉
+            ctx.save();
+            ctx.translate(player.x, player.y);
+            if (target.x < player.x) {
+                ctx.scale(-1, 1);
+            }
+            ctx.font = '60px Arial';
+            ctx.fillText('🐯', 0, 0);
+            ctx.restore();
+
+
+            // 畫特效
+            ctx.font = 'bold 24px Arial';
+            ctx.fillStyle = '#FFA500';
+            ctx.strokeStyle = 'black';
+            ctx.lineWidth = 1;
+            effects.forEach(e => {
+                ctx.fillText(e.text, e.x, e.y);
+                ctx.strokeText(e.text, e.x, e.y);
+            });
+
+            if (gameRunning) requestAnimationFrame(update);
+        }
+
+        function gameOver() {
+            gameRunning = false;
+            finalScoreEl.innerText = score;
+            gameOverEl.style.display = 'block';
+        }
+
+        function resetGame() {
+            gameRunning = true;
+            score = 0;
+            scoreEl.innerText = '0';
+            gameOverEl.style.display = 'none';
+            meats.length = 0;
+            fires.length = 0;
+            effects.length = 0;
+            player.x = width / 2;
+            player.y = height / 2;
+            target.x = width / 2;
+            target.y = height / 2;
+            update();
+        }
+
+        update();
+    </script>
+</body>
+</html>

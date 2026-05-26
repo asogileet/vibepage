@@ -1,0 +1,651 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>大話骰 (Liar's Dice) - Master Game</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: #2c3e50;
+            color: white;
+            margin: 0;
+            padding: 0;
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+            overflow: hidden;
+            user-select: none;
+        }
+
+        /* Top Bar */
+        .header {
+            background: rgba(0,0,0,0.3);
+            padding: 10px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .back-btn {
+            background: none;
+            border: 1px solid white;
+            color: white;
+            padding: 5px 10px;
+            border-radius: 5px;
+            text-decoration: none;
+            font-size: 0.9rem;
+        }
+
+        /* Game Area */
+        .game-area {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            padding: 10px;
+            position: relative;
+        }
+
+        /* Opponent (AI) */
+        .opponent-area {
+            text-align: center;
+            padding: 10px;
+            background: rgba(255,255,255,0.05);
+            border-radius: 10px;
+        }
+
+        .dice-container {
+            display: flex;
+            justify-content: center;
+            gap: 10px;
+            margin-top: 5px;
+            min-height: 50px;
+        }
+
+        .die {
+            width: 40px;
+            height: 40px;
+            background: white;
+            border-radius: 8px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            color: #333;
+            font-size: 24px;
+            font-weight: bold;
+            box-shadow: 2px 2px 5px rgba(0,0,0,0.3);
+            position: relative;
+        }
+
+        .die.hidden {
+            background: #555;
+            color: #777;
+        }
+        .die.hidden::after {
+            content: '?';
+        }
+
+        .die.one { color: red; } /* 1 is red usually */
+
+        /* Center Info */
+        .center-info {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            text-align: center;
+        }
+
+        .current-bid {
+            font-size: 1.5rem;
+            margin-bottom: 10px;
+            background: rgba(0,0,0,0.4);
+            padding: 10px 20px;
+            border-radius: 20px;
+            border: 2px solid #f1c40f;
+        }
+
+        .message-log {
+            font-size: 0.9rem;
+            color: #ccc;
+            height: 60px;
+            overflow: hidden;
+        }
+
+        /* Player Area */
+        .player-area {
+            background: rgba(0,0,0,0.2);
+            padding: 15px;
+            border-radius: 15px 15px 0 0;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        .cup-toggle {
+            margin-bottom: 10px;
+            background: #e67e22;
+            border: none;
+            color: white;
+            padding: 5px 15px;
+            border-radius: 15px;
+            font-size: 0.9rem;
+            cursor: pointer;
+        }
+
+        /* Controls */
+        .controls {
+            width: 100%;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        .bid-selector {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .selector-box {
+            background: white;
+            color: #333;
+            padding: 5px 10px;
+            border-radius: 5px;
+            display: flex;
+            align-items: center;
+            gap: 5px;
+        }
+        
+        select {
+            font-size: 1.2rem;
+            border: none;
+            background: transparent;
+            font-weight: bold;
+            outline: none;
+        }
+
+        .action-buttons {
+            display: flex;
+            gap: 10px;
+            justify-content: center;
+        }
+
+        .btn {
+            border: none;
+            padding: 12px 24px;
+            border-radius: 8px;
+            font-size: 1.1rem;
+            font-weight: bold;
+            cursor: pointer;
+            transition: transform 0.1s;
+            flex: 1;
+            max-width: 150px;
+        }
+        
+        .btn:active { transform: scale(0.95); }
+        .btn-bid { background: #2ecc71; color: white; }
+        .btn-open { background: #e74c3c; color: white; }
+        .btn-restart { background: #3498db; color: white; display: none; }
+
+        .btn:disabled {
+            background: #7f8c8d;
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        /* Animations */
+        @keyframes shake {
+            0% { transform: translate(1px, 1px) rotate(0deg); }
+            10% { transform: translate(-1px, -2px) rotate(-1deg); }
+            20% { transform: translate(-3px, 0px) rotate(1deg); }
+            30% { transform: translate(3px, 2px) rotate(0deg); }
+            40% { transform: translate(1px, -1px) rotate(1deg); }
+            50% { transform: translate(-1px, 2px) rotate(-1deg); }
+            60% { transform: translate(-3px, 1px) rotate(0deg); }
+            70% { transform: translate(3px, 1px) rotate(-1deg); }
+            80% { transform: translate(-1px, -1px) rotate(1deg); }
+            90% { transform: translate(1px, 2px) rotate(0deg); }
+            100% { transform: translate(1px, -2px) rotate(-1deg); }
+        }
+
+        .shaking {
+            animation: shake 0.5s;
+        }
+        
+        /* Modal for Winner */
+        .modal-overlay {
+            position: fixed;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(0,0,0,0.8);
+            display: none;
+            justify-content: center;
+            align-items: center;
+            z-index: 100;
+        }
+        
+        .modal {
+            background: white;
+            color: #333;
+            padding: 20px;
+            border-radius: 10px;
+            text-align: center;
+            min-width: 250px;
+        }
+        
+        .modal h2 { margin-top: 0; }
+
+    </style>
+</head>
+<body>
+
+    <div class="header">
+        <a href="index.html" class="back-btn">← 回大廳</a>
+        <span>🎲 大話骰</span>
+        <span>🪙 積分: <span id="score">0</span></span>
+    </div>
+
+    <div class="game-area">
+        
+        <!-- Opponent -->
+        <div class="opponent-area">
+            <div>🤖 電腦對手 (骰子: <span id="ai-dice-count">5</span>)</div>
+            <div class="dice-container" id="ai-dice-container">
+                <!-- AI Dice rendered here -->
+            </div>
+            <div id="ai-status" style="font-size: 0.8rem; color: #f1c40f; height: 20px;"></div>
+        </div>
+
+        <!-- Center Table -->
+        <div class="center-info">
+            <div id="current-bid-display" class="current-bid">請開始喊點</div>
+            <div class="message-log" id="log">
+                遊戲開始！你先喊。<br>
+            </div>
+        </div>
+
+        <!-- Player -->
+        <div class="player-area">
+            <button class="cup-toggle" onclick="toggleCup()">👁️ 查看/隱藏我的骰子</button>
+            
+            <div class="dice-container" id="player-dice-container">
+                <!-- Player Dice rendered here -->
+            </div>
+
+            <div style="margin: 10px 0;">剩餘骰子: <span id="player-dice-count">5</span></div>
+
+            <div class="controls" id="controls">
+                
+                <div class="bid-selector">
+                    <div class="selector-box">
+                        <span>數量:</span>
+                        <button onclick="adjustCount(-1)">-</button>
+                        <span id="bid-count-val" style="font-size:1.2rem; font-weight:bold; min-width:30px; text-align:center;">1</span>
+                        <button onclick="adjustCount(1)">+</button>
+                    </div>
+                    
+                    <div class="selector-box">
+                        <span>點數:</span>
+                        <select id="bid-face">
+                            <option value="1">1 (齋)</option>
+                            <option value="2">2</option>
+                            <option value="3">3</option>
+                            <option value="4">4</option>
+                            <option value="5">5</option>
+                            <option value="6">6</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="action-buttons">
+                    <button class="btn btn-open" id="btn-open" onclick="playerOpen()" disabled>開！(抓)</button>
+                    <button class="btn btn-bid" id="btn-bid" onclick="playerBid()">喊！</button>
+                    <button class="btn btn-restart" id="btn-restart" onclick="resetGame()">下一局</button>
+                </div>
+
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal Result -->
+    <div class="modal-overlay" id="result-modal">
+        <div class="modal">
+            <h2 id="modal-title">結果</h2>
+            <p id="modal-msg">...</p>
+            <button class="btn btn-bid" onclick="closeModal()">確定</button>
+        </div>
+    </div>
+
+    <script>
+        // Game State
+        let playerDice = [];
+        let aiDice = [];
+        let currentBid = { count: 0, face: 0 }; // 0 face means no bid yet
+        let turn = 'player'; // 'player' or 'ai'
+        let isWild = true; // 1 is wild until someone bids 1
+        let totalDiceCount = 10;
+        let score = 0;
+        
+        // Setup
+        function initGame() {
+            playerDice = roll(5);
+            aiDice = roll(5);
+            currentBid = { count: 0, face: 0 };
+            turn = 'player';
+            isWild = true;
+            totalDiceCount = 10;
+            
+            updateUI();
+            log("遊戲開始！你的回合。");
+            document.getElementById('btn-restart').style.display = 'none';
+            document.getElementById('controls').style.opacity = '1';
+            document.getElementById('controls').style.pointerEvents = 'auto';
+            document.getElementById('btn-open').disabled = true; // Can't open on first turn
+            
+            // Reset selectors
+            document.getElementById('bid-count-val').innerText = '1';
+            document.getElementById('bid-face').value = '2';
+            
+            // Render Dice
+            renderDice('player-dice-container', playerDice, false); // Visible
+            renderDice('ai-dice-container', aiDice, true); // Hidden
+        }
+
+        function roll(n) {
+            let arr = [];
+            for(let i=0; i<n; i++) arr.push(Math.floor(Math.random() * 6) + 1);
+            return arr.sort((a,b) => a-b);
+        }
+
+        function renderDice(containerId, diceArr, hidden) {
+            const container = document.getElementById(containerId);
+            container.innerHTML = '';
+            diceArr.forEach(val => {
+                const div = document.createElement('div');
+                div.className = hidden ? 'die hidden' : 'die';
+                if (!hidden) {
+                    div.innerText = getDiceChar(val);
+                    if (val === 1) div.classList.add('one');
+                }
+                container.appendChild(div);
+            });
+        }
+
+        function getDiceChar(num) {
+            // return num; // Simple number
+            const map = ['','⚀','⚁','⚂','⚃','⚄','⚅'];
+            return map[num];
+        }
+
+        // Toggle Cup
+        let cupVisible = true;
+        function toggleCup() {
+            cupVisible = !cupVisible;
+            renderDice('player-dice-container', playerDice, !cupVisible);
+        }
+
+        // Bidding Logic
+        let selectedCount = 1;
+        
+        function adjustCount(delta) {
+            let newVal = selectedCount + delta;
+            if (newVal < 1) newVal = 1;
+            if (newVal > totalDiceCount) newVal = totalDiceCount;
+            selectedCount = newVal;
+            document.getElementById('bid-count-val').innerText = selectedCount;
+        }
+
+        function isValidBid(count, face) {
+            if (currentBid.count === 0) return true; // First bid always valid
+
+            // Must be higher logic
+            if (count > currentBid.count) return true;
+            if (count === currentBid.count && face > currentBid.face) return true;
+            
+            return false;
+        }
+
+        function playerBid() {
+            const face = parseInt(document.getElementById('bid-face').value);
+            const count = selectedCount;
+
+            if (!isValidBid(count, face)) {
+                alert("喊的數量或點數必須比上家大！");
+                return;
+            }
+
+            // Execute Bid
+            submitBid('player', count, face);
+        }
+
+        function submitBid(who, count, face) {
+            currentBid = { count, face };
+            
+            // If someone bids 1s, they are no longer wild (unless they were already not wild?)
+            // Actually, in standard rules, if you bid 1s, 1s are just 1s.
+            // If you bid other numbers, 1s are wild unless "齋" was called.
+            // For simplicity: 1s are wild unless the current bid face IS 1.
+            if (face === 1) isWild = false;
+
+            updateBidDisplay();
+            log(`${who === 'player' ? '你' : '電腦'} 喊了: ${count} 個 ${face}`);
+            
+            document.getElementById('btn-open').disabled = false; // Can open now
+
+            if (who === 'player') {
+                turn = 'ai';
+                disableControls();
+                setTimeout(aiTurn, 1500); // AI thinking time
+            } else {
+                turn = 'player';
+                enableControls();
+                
+                // Adjust player's default selector to be valid next bid
+                if (isValidBid(count, face)) {
+                    // Current bid is what AI just did.
+                    // Set selector to same count, next face?
+                    selectedCount = count;
+                    document.getElementById('bid-count-val').innerText = selectedCount;
+                    let nextFace = face + 1;
+                    if (nextFace > 6) {
+                        nextFace = 2; // Reset face? tricky.
+                    }
+                    // This is just a UX helper, doesn't force it.
+                }
+            }
+        }
+
+        function updateBidDisplay() {
+            const disp = document.getElementById('current-bid-display');
+            if (currentBid.count === 0) {
+                disp.innerText = "請開始喊點";
+            } else {
+                disp.innerHTML = `${currentBid.count} 個 <span style="font-size:1.8rem; color: #f1c40f;">${getDiceChar(currentBid.face)}</span> (${currentBid.face})`;
+            }
+        }
+
+        // Open / Challenge
+        function playerOpen() {
+            log("你選擇開牌！");
+            resolveRound('player'); // Player opens AI
+        }
+
+        function resolveRound(opener) {
+            // Reveal AI Dice
+            renderDice('ai-dice-container', aiDice, false);
+            
+            // Calculate Total
+            const targetFace = currentBid.face;
+            let total = 0;
+            
+            // Count Player
+            playerDice.forEach(d => {
+                if (d === targetFace || (isWild && d === 1)) total++;
+            });
+            // Count AI
+            aiDice.forEach(d => {
+                if (d === targetFace || (isWild && d === 1)) total++;
+            });
+
+            log(`總共有 ${total} 個 ${targetFace} (1是${isWild?'萬能':'普通'})`);
+
+            // Who wins?
+            // If total >= bid, Bidder wins, Opener loses.
+            // If total < bid, Bidder loses, Opener wins.
+            
+            let winner = '';
+            let msg = '';
+            
+            const bidder = opener === 'player' ? 'ai' : 'player';
+            
+            if (total >= currentBid.count) {
+                // Bid was safe. Bidder wins.
+                winner = bidder;
+                msg = `場上有 ${total} 個！${bidder==='player'?'你':'電腦'} 喊對了 (>=${currentBid.count})。`;
+            } else {
+                // Bluff called. Opener wins.
+                winner = opener;
+                msg = `場上只有 ${total} 個！${bidder==='player'?'你':'電腦'} 吹牛失敗。`;
+            }
+
+            if (winner === 'player') {
+                score += 100;
+                showModal('你贏了！', msg + " +100分");
+            } else {
+                score -= 50;
+                showModal('你輸了...', msg + " -50分");
+            }
+
+            document.getElementById('score').innerText = score;
+            document.getElementById('btn-restart').style.display = 'block';
+            document.getElementById('btn-bid').style.display = 'none';
+            document.getElementById('btn-open').style.display = 'none';
+        }
+
+        // AI Logic
+        function aiTurn() {
+            document.getElementById('ai-status').innerText = "思考中...";
+            
+            // Simple AI Strategy
+            // 1. Count AI's own matching dice (natural + 1s)
+            const myCount = aiDice.filter(d => d === currentBid.face || d === 1).length;
+            
+            // 2. Estimate player's dice (Expected value: total dice / 3 approx for any face if wilds)
+            // Or simplified: assume player has 1-2 of them.
+            const estimatedTotal = myCount + 1.5; // Optimistic AI
+            
+            // 3. Decision
+            const isBluff = currentBid.count > estimatedTotal + 1; // If bid is way high
+            
+            // Random factor
+            const r = Math.random();
+
+            if (currentBid.count >= 7 && r > 0.3) {
+                 // High count, likely challenge
+                 aiOpen();
+            } else if (currentBid.count > myCount + 3) {
+                // Very suspicious
+                aiOpen();
+            } else {
+                // AI Bids
+                // Try to raise quantity on same face, or change face?
+                let nextCount = currentBid.count;
+                let nextFace = currentBid.face;
+                
+                // Strategy: if I have many of something else, switch to that?
+                // Find AI's best face
+                let bestFace = 0;
+                let maxCount = -1;
+                let counts = [0,0,0,0,0,0,0];
+                aiDice.forEach(d => counts[d]++);
+                // Add 1s to all
+                for(let i=2; i<=6; i++) counts[i] += counts[1];
+                
+                // Find max
+                for(let i=2; i<=6; i++) {
+                    if (counts[i] > maxCount) {
+                        maxCount = counts[i];
+                        bestFace = i;
+                    }
+                }
+
+                // Logic to increment bid
+                if (currentBid.face === 0) {
+                    // First bid
+                    nextCount = Math.max(2, maxCount); // Start with at least 2 or my max
+                    nextFace = bestFace || 2;
+                } else {
+                    // Must raise
+                    // Can I raise face on same count?
+                    if (bestFace > currentBid.face && isValidBid(currentBid.count, bestFace)) {
+                        nextFace = bestFace;
+                    } else {
+                        // Must raise count
+                        nextCount = currentBid.count + 1;
+                        // Pick face I have most of, or random
+                        if (bestFace > 0) nextFace = bestFace;
+                        else nextFace = Math.floor(Math.random()*5)+2;
+                    }
+                }
+                
+                // Sanity check max
+                if (nextCount > 10) {
+                    aiOpen();
+                    return;
+                }
+
+                document.getElementById('ai-status').innerText = "";
+                submitBid('ai', nextCount, nextFace);
+            }
+        }
+
+        function aiOpen() {
+            document.getElementById('ai-status').innerText = "電腦決定開牌！";
+            log("電腦質疑你的骰子！(開牌)");
+            setTimeout(() => {
+                resolveRound('ai');
+            }, 1000);
+        }
+
+        // Helpers
+        function log(msg) {
+            const div = document.getElementById('log');
+            div.innerHTML = msg + "<br>" + div.innerHTML;
+        }
+
+        function disableControls() {
+            document.getElementById('controls').style.opacity = '0.5';
+            document.getElementById('controls').style.pointerEvents = 'none';
+        }
+
+        function enableControls() {
+            document.getElementById('controls').style.opacity = '1';
+            document.getElementById('controls').style.pointerEvents = 'auto';
+        }
+
+        function resetGame() {
+            document.getElementById('btn-bid').style.display = 'block';
+            document.getElementById('btn-open').style.display = 'block';
+            closeModal();
+            initGame();
+        }
+        
+        function showModal(title, msg) {
+            document.getElementById('modal-title').innerText = title;
+            document.getElementById('modal-msg').innerText = msg;
+            document.getElementById('result-modal').style.display = 'flex';
+        }
+        
+        function closeModal() {
+            document.getElementById('result-modal').style.display = 'none';
+        }
+
+        // Start
+        initGame();
+
+    </script>
+</body>
+</html>

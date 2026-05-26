@@ -1,0 +1,266 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>2048 遊戲</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+        body { font-family: 'Segoe UI', Tahoma, sans-serif; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); min-height: 100vh; display: flex; flex-direction: column; align-items: center; padding: 20px; color: white; touch-action: none; overflow: hidden; }
+        h1 { font-size: 2.5rem; margin-bottom: 10px; text-shadow: 2px 2px 4px rgba(0,0,0,0.3); }
+        .score-container { display: flex; gap: 15px; margin-bottom: 15px; }
+        .score-box { background: rgba(255,255,255,0.2); padding: 8px 20px; border-radius: 10px; text-align: center; }
+        .score-label { font-size: 0.75rem; opacity: 0.8; }
+        .score-value { font-size: 1.3rem; font-weight: bold; }
+        .game-container { background: rgba(255,255,255,0.15); border-radius: 15px; padding: 12px; backdrop-filter: blur(10px); box-shadow: 0 10px 30px rgba(0,0,0,0.3); }
+        .grid { display: grid; grid-template-columns: repeat(4, 70px); grid-template-rows: repeat(4, 70px); gap: 8px; }
+        .cell { width: 70px; height: 70px; border-radius: 8px; display: flex; align-items: center; justify-content: center; font-size: 1.8rem; font-weight: bold; transition: transform 0.12s ease, opacity 0.12s ease; }
+        .cell-0 { background: rgba(238, 228, 218, 0.35); }
+        .cell-2 { background: #eee4da; color: #776e65; }
+        .cell-4 { background: #ede0c8; color: #776e65; }
+        .cell-8 { background: #f2b179; color: #f9f6f2; }
+        .cell-16 { background: #f59563; color: #f9f6f2; }
+        .cell-32 { background: #f67c5f; color: #f9f6f2; }
+        .cell-64 { background: #f65e3b; color: #f9f6f2; }
+        .cell-128 { background: #edcf72; color: #f9f6f2; }
+        .cell-256 { background: #edcc61; color: #f9f6f2; }
+        .cell-512 { background: #edc850; color: #f9f6f2; }
+        .cell-1024 { background: #edc53f; color: #f9f6f2; font-size: 1.4rem; }
+        .cell-2048 { background: #edc22e; color: #f9f6f2; font-size: 1.4rem; }
+        .cell-new { animation: popIn 0.2s ease; }
+        .cell-merged { animation: merge 0.2s ease; }
+        @keyframes popIn { 0% { transform: scale(0); opacity: 0; } 100% { transform: scale(1); opacity: 1; } }
+        @keyframes merge { 0% { transform: scale(1.2); } 100% { transform: scale(1); } }
+        .controls { margin-top: 15px; display: flex; gap: 10px; }
+        button { padding: 10px 20px; font-size: 0.9rem; border: none; border-radius: 10px; cursor: pointer; background: rgba(255,255,255,0.3); color: white; transition: all 0.3s; touch-action: manipulation; }
+        button:hover { background: rgba(255,255,255,0.5); }
+        button:active { transform: scale(0.95); }
+        .instructions { margin-top: 15px; text-align: center; opacity: 0.8; font-size: 0.85rem; }
+        .game-over { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.8); display: flex; align-items: center; justify-content: center; flex-direction: column; z-index: 100; }
+        .game-over h2 { font-size: 2.5rem; margin-bottom: 20px; }
+        .game-over p { margin-bottom: 15px; font-size: 1.1rem; }
+        .hidden { display: none !important; }
+        /* Mobile D-pad controls */
+        .dpad { display: none; margin-top: 20px; }
+        .dpad-row { display: flex; justify-content: center; gap: 5px; }
+        .dpad-btn { width: 60px; height: 60px; border-radius: 12px; font-size: 1.5rem; background: rgba(255,255,255,0.25); border: 2px solid rgba(255,255,255,0.3); color: white; cursor: pointer; touch-action: manipulation; display: flex; align-items: center; justify-content: center; user-select: none; -webkit-user-select: none; }
+        .dpad-btn:active { background: rgba(255,255,255,0.5); transform: scale(0.9); }
+        .dpad-spacer { width: 60px; height: 60px; }
+        @media (max-width: 500px) {
+            h1 { font-size: 2rem; }
+            .grid { grid-template-columns: repeat(4, 60px); grid-template-rows: repeat(4, 60px); gap: 6px; }
+            .cell { width: 60px; height: 60px; font-size: 1.5rem; }
+            .cell-1024, .cell-2048 { font-size: 1.1rem; }
+            .dpad { display: flex; flex-direction: column; align-items: center; gap: 5px; }
+            .instructions { display: none; }
+        }
+    </style>
+</head>
+<body>
+    <h1>2048</h1>
+    <div class="score-container">
+        <div class="score-box"><div class="score-label">分數</div><div class="score-value" id="score">0</div></div>
+        <div class="score-box"><div class="score-label">最高分</div><div class="score-value" id="best">0</div></div>
+    </div>
+    <div class="game-container">
+        <div class="grid" id="grid"></div>
+    </div>
+    
+    <!-- Mobile D-pad -->
+    <div class="dpad">
+        <div class="dpad-row"><div class="dpad-spacer"></div><button class="dpad-btn" data-dir="up">▲</button><div class="dpad-spacer"></div></div>
+        <div class="dpad-row"><button class="dpad-btn" data-dir="left">◀</button><div class="dpad-spacer"></div><button class="dpad-btn" data-dir="right">▶</button></div>
+        <div class="dpad-row"><div class="dpad-spacer"></div><button class="dpad-btn" data-dir="down">▼</button><div class="dpad-spacer"></div></div>
+    </div>
+    
+    <div class="controls">
+        <button onclick="resetGame()">重新開始</button>
+        <button onclick="window.location.href='index.html'">返回大廳</button>
+    </div>
+    <div class="instructions"><p>使用方向鍵 / WASD 鍵移動方塊</p><p>相同數字相加，湊到 2048 即勝利！</p></div>
+    <div id="game-over" class="game-over hidden">
+        <h2 id="game-over-text">遊戲結束</h2>
+        <p id="final-score">分數: 0</p>
+        <button onclick="resetGame()">再玩一次</button>
+        <button onclick="document.getElementById('game-over').classList.add('hidden')">關閉</button>
+    </div>
+    <script>
+        let grid = [], score = 0, best = parseInt(localStorage.getItem('2048_best')) || 0, isAnimating = false;
+        document.getElementById('best').textContent = best;
+        
+        function init() { 
+            grid = Array(4).fill(null).map(() => Array(4).fill(0)); 
+            score = 0; 
+            updateScore(); 
+            addRandomTile(); 
+            addRandomTile(); 
+            render(); 
+        }
+        
+        function addRandomTile() { 
+            let empty = []; 
+            for (let i = 0; i < 4; i++) for (let j = 0; j < 4; j++) if (grid[i][j] === 0) empty.push({i, j}); 
+            if (empty.length > 0) { 
+                let {i, j} = empty[Math.floor(Math.random() * empty.length)]; 
+                grid[i][j] = Math.random() < 0.9 ? 2 : 4;
+                return {i, j}; // 返回新方塊位置
+            }
+            return null;
+        }
+        
+        function render(newTilePos) { 
+            let g = document.getElementById('grid'); 
+            g.innerHTML = ''; 
+            for (let i = 0; i < 4; i++) for (let j = 0; j < 4; j++) { 
+                let c = document.createElement('div'); 
+                let v = grid[i][j]; 
+                c.className = 'cell cell-' + (v > 2048 ? 2048 : v); 
+                if (v === 0) c.className = 'cell cell-0';
+                else c.className = 'cell cell-' + (v > 2048 ? 2048 : v);
+                c.textContent = v || ''; 
+                if (newTilePos && newTilePos.i === i && newTilePos.j === j) c.classList.add('cell-new');
+                g.appendChild(c); 
+            } 
+        }
+        
+        function updateScore() { 
+            document.getElementById('score').textContent = score; 
+            if (score > best) { 
+                best = score; 
+                localStorage.setItem('2048_best', best); 
+                document.getElementById('best').textContent = best; 
+            } 
+        }
+        
+        function slide(row) { 
+            let arr = row.filter(x => x !== 0), merged = []; 
+            for (let i = 0; i < arr.length; i++) { 
+                if (i < arr.length - 1 && arr[i] === arr[i + 1]) { 
+                    arr[i] *= 2; 
+                    score += arr[i]; 
+                    merged.push(arr[i]); 
+                    i++; 
+                } else merged.push(arr[i]); 
+            } 
+            while (merged.length < 4) merged.push(0); 
+            return merged; 
+        }
+        
+        function rotateGrid() { 
+            let newGrid = []; 
+            for (let i = 0; i < 4; i++) newGrid.push([grid[3-i][0], grid[3-i][1], grid[3-i][2], grid[3-i][3]]); 
+            grid = newGrid; 
+        }
+        
+        function move(direction) { 
+            if (isAnimating) return; 
+            let prev = JSON.stringify(grid); 
+            
+            // 0=上, 1=右, 2=下, 3=左
+            for (let i = 0; i < direction; i++) rotateGrid(); 
+            for (let i = 0; i < 4; i++) grid[i] = slide(grid[i]); 
+            for (let i = 0; i < (4 - direction) % 4; i++) rotateGrid(); 
+            
+            if (JSON.stringify(grid) !== prev) { 
+                isAnimating = true; 
+                let newTile = addRandomTile();
+                render(newTile); 
+                updateScore(); 
+                setTimeout(() => { isAnimating = false; checkGameState(); }, 150); 
+            } 
+        }
+        
+        function checkGameState() { 
+            for (let i = 0; i < 4; i++) for (let j = 0; j < 4; j++) if (grid[i][j] === 2048) { 
+                document.getElementById('game-over-text').textContent = '🎉 你贏了！'; 
+                document.getElementById('final-score').textContent = '分數: ' + score; 
+                document.getElementById('game-over').classList.remove('hidden'); 
+                return; 
+            } 
+            let canMove = false; 
+            for (let i = 0; i < 4; i++) for (let j = 0; j < 4; j++) { 
+                if (grid[i][j] === 0) canMove = true; 
+                if (j < 3 && grid[i][j] === grid[i][j+1]) canMove = true; 
+                if (i < 3 && grid[i][j] === grid[i+1][j]) canMove = true; 
+            } 
+            if (!canMove) { 
+                document.getElementById('game-over-text').textContent = '遊戲結束'; 
+                document.getElementById('final-score').textContent = '分數: ' + score; 
+                document.getElementById('game-over').classList.remove('hidden'); 
+            } 
+        }
+        
+        function resetGame() { 
+            document.getElementById('game-over').classList.add('hidden'); 
+            init(); 
+        }
+        
+        // Keyboard
+        document.addEventListener('keydown', e => { 
+            switch(e.key) { 
+                case 'ArrowUp': e.preventDefault(); move(0); break; 
+                case 'ArrowRight': e.preventDefault(); move(1); break; 
+                case 'ArrowDown': e.preventDefault(); move(2); break; 
+                case 'ArrowLeft': e.preventDefault(); move(3); break; 
+                case 'w': case 'W': move(0); break; 
+                case 'd': case 'D': move(1); break; 
+                case 's': case 'S': move(2); break; 
+                case 'a': case 'A': move(3); break; 
+            } 
+        });
+        
+        // D-pad buttons
+        document.querySelectorAll('.dpad-btn').forEach(btn => {
+            btn.addEventListener('touchstart', e => { e.preventDefault(); e.stopPropagation(); });
+            btn.addEventListener('click', e => {
+                e.preventDefault();
+                switch(btn.dataset.dir) {
+                    case 'up': move(0); break;
+                    case 'right': move(1); break;
+                    case 'down': move(2); break;
+                    case 'left': move(3); break;
+                }
+            });
+        });
+        
+        // Touch swipe - improved
+        let touchStartX = 0, touchStartY = 0, touchStartTime = 0;
+        const MIN_SWIPE = 30, MAX_TIME = 500;
+        
+        document.addEventListener('touchstart', e => {
+            if (e.target.closest('.dpad-btn') || e.target.closest('button')) return;
+            touchStartX = e.touches[0].clientX;
+            touchStartY = e.touches[0].clientY;
+            touchStartTime = Date.now();
+        }, { passive: true });
+        
+        document.addEventListener('touchend', e => {
+            if (!touchStartX || !touchStartY) return;
+            let dx = e.changedTouches[0].clientX - touchStartX;
+            let dy = e.changedTouches[0].clientY - touchStartY;
+            let dt = Date.now() - touchStartTime;
+            
+            // 忽略點擊
+            if (Math.abs(dx) < MIN_SWIPE && Math.abs(dy) < MIN_SWIPE) {
+                touchStartX = touchStartY = 0;
+                return;
+            }
+            
+            // 太快或太慢都不算
+            if (dt > MAX_TIME) {
+                touchStartX = touchStartY = 0;
+                return;
+            }
+            
+            if (Math.abs(dx) > Math.abs(dy)) {
+                move(dx > 0 ? 1 : 3);
+            } else {
+                move(dy > 0 ? 2 : 0);
+            }
+            touchStartX = touchStartY = 0;
+        }, { passive: true });
+        
+        init();
+    </script>
+</body>
+</html>

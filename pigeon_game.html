@@ -1,0 +1,430 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>鴿子轟炸機 (Pigeon Bomber)</title>
+    <style>
+        body {
+            margin: 0;
+            overflow: hidden;
+            background: #87CEEB; /* Sky Blue */
+            font-family: 'Segoe UI', sans-serif;
+            touch-action: none;
+            user-select: none;
+        }
+        canvas {
+            display: block;
+            width: 100%;
+            height: 100%;
+        }
+        #ui {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            color: white;
+            font-size: 24px;
+            font-weight: bold;
+            text-shadow: 2px 2px 0 #000;
+            pointer-events: none;
+        }
+        #startScreen {
+            position: absolute;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.7);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            color: white;
+            z-index: 100;
+        }
+        h1 { margin: 0 0 20px 0; font-size: 40px; color: #FFF; text-shadow: 0 4px 0 #333; }
+        p { font-size: 20px; color: #eee; }
+        button {
+            background: #FFD700;
+            color: #333;
+            border: 4px solid #fff;
+            padding: 15px 40px;
+            font-size: 24px;
+            font-weight: bold;
+            border-radius: 50px;
+            margin-top: 30px;
+            cursor: pointer;
+            box-shadow: 0 6px 0 #B8860B;
+            transition: transform 0.1s;
+        }
+        button:active {
+            transform: translateY(4px);
+            box-shadow: 0 2px 0 #B8860B;
+        }
+        .hit-text {
+            position: absolute;
+            color: #FFD700;
+            font-weight: bold;
+            font-size: 24px;
+            pointer-events: none;
+            animation: floatUp 1s forwards;
+            text-shadow: 2px 2px 0 #000;
+        }
+        @keyframes floatUp {
+            0% { transform: translateY(0) scale(1); opacity: 1; }
+            100% { transform: translateY(-50px) scale(1.5); opacity: 0; }
+        }
+    </style>
+</head>
+<body>
+
+    <div id="ui">
+        💩 hits: <span id="score">0</span>
+    </div>
+
+    <div id="startScreen">
+        <h1>🐦 鴿子轟炸機</h1>
+        <p>點擊螢幕 = 投下一坨屎</p>
+        <p>瞄準路人和車子！</p>
+        <button onclick="startGame()">開始轟炸</button>
+    </div>
+
+    <canvas id="gameCanvas"></canvas>
+
+    <script>
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        const scoreEl = document.getElementById('score');
+        const startScreen = document.getElementById('startScreen');
+        const startBtn = document.getElementById('startBtn'); // Get button specifically
+
+        let width, height;
+        let gameRunning = false;
+        let score = 0;
+        
+        // 鴿子
+        const bird = {
+            x: 0,
+            y: 50,
+            vx: 3,
+            width: 60,
+            height: 40,
+            flap: 0
+        };
+
+        const poops = [];
+        const targets = [];
+        const particles = [];
+
+        function resize() {
+            width = window.innerWidth;
+            height = window.innerHeight;
+            canvas.width = width;
+            canvas.height = height;
+        }
+        window.addEventListener('resize', resize);
+        resize();
+
+        // --- 輸入控制 ---
+        function dropPoop(e) {
+            if (!gameRunning) return;
+            // 如果點擊的是 UI 元素 (除了 canvas 以外)，不要投彈
+            if (e && e.target !== canvas) return;
+
+            // 限制投彈頻率 (避免連點)
+            if (poops.length > 3) return; 
+
+            poops.push({
+                x: bird.x,
+                y: bird.y + 20,
+                vx: bird.vx * 0.5, // 慣性
+                vy: 0
+            });
+            
+            // 鴿子用力一下的特效
+            bird.y -= 10;
+        }
+
+        // 修改：分開處理，避免衝突
+        canvas.addEventListener('mousedown', dropPoop);
+        canvas.addEventListener('touchstart', (e) => {
+            if (!gameRunning) return;
+            e.preventDefault(); // 防止縮放，只對 Canvas 有效
+            dropPoop(e);
+        }, { passive: false });
+        
+        window.addEventListener('keydown', (e) => {
+            if (e.code === 'Space') dropPoop();
+        });
+
+
+        // --- 遊戲邏輯 ---
+        
+        // 修改：明確綁定到 window 或是直接被按鈕呼叫
+        window.startGame = function() {
+            console.log("Game Starting..."); // Debug
+            startScreen.style.display = 'none';
+            score = 0;
+            scoreEl.innerText = '0';
+            gameRunning = true;
+            loop();
+        };
+
+        // ... (其餘邏輯保持不變) ...
+
+        function spawnTarget() {
+            const typeRand = Math.random();
+            let type = 'person';
+            let speed = 1 + Math.random();
+            let scoreVal = 10;
+            let w = 30, h = 50;
+
+            if (typeRand > 0.7) {
+                type = 'car';
+                speed = 3 + Math.random() * 2;
+                scoreVal = 20;
+                w = 80; h = 40;
+            } else if (typeRand > 0.95) {
+                type = 'police'; // 稀有
+                speed = 5;
+                scoreVal = 50;
+                w = 30; h = 50;
+            }
+
+            const fromLeft = Math.random() > 0.5;
+            
+            targets.push({
+                x: fromLeft ? -50 : width + 50,
+                y: height - h - 10, // 地面上
+                vx: fromLeft ? speed : -speed,
+                width: w,
+                height: h,
+                type: type,
+                score: scoreVal,
+                walking: 0
+            });
+        }
+
+        function createSplatter(x, y, color) {
+            for(let i=0; i<8; i++) {
+                particles.push({
+                    x: x, y: y,
+                    vx: (Math.random() - 0.5) * 5,
+                    vy: (Math.random() - 0.5) * 5,
+                    life: 30,
+                    color: color
+                });
+            }
+        }
+
+        function showHitText(x, y, text) {
+            const el = document.createElement('div');
+            el.className = 'hit-text';
+            el.style.left = x + 'px';
+            el.style.top = y + 'px';
+            el.innerText = text;
+            document.body.appendChild(el);
+            setTimeout(() => el.remove(), 1000);
+        }
+
+        function update() {
+            if (!gameRunning) return;
+
+            // 鴿子移動 (自動來回飛)
+            bird.x += bird.vx;
+            if (bird.x > width - 50 && bird.vx > 0) bird.vx *= -1;
+            if (bird.x < 50 && bird.vx < 0) bird.vx *= -1;
+            
+            // 飛行浮動
+            bird.y = 50 + Math.sin(Date.now() / 200) * 10;
+            bird.flap = (Math.sin(Date.now() / 50) + 1) / 2; // 翅膀拍動
+
+            // 生成目標
+            if (Math.random() < 0.02) spawnTarget();
+
+            // 更新大便
+            for (let i = poops.length - 1; i >= 0; i--) {
+                let p = poops[i];
+                p.x += p.vx;
+                p.y += p.vy;
+                p.vy += 0.5; // 重力加速度
+
+                // 落地
+                if (p.y > height - 10) {
+                    createSplatter(p.x, height-10, '#8B4513');
+                    poops.splice(i, 1);
+                    continue;
+                }
+
+                // 命中檢測
+                for (let j = targets.length - 1; j >= 0; j--) {
+                    let t = targets[j];
+                    if (
+                        p.x > t.x && p.x < t.x + t.width &&
+                        p.y > t.y && p.y < t.y + t.height
+                    ) {
+                        // HIT!
+                        score += t.score;
+                        scoreEl.innerText = score;
+                        createSplatter(p.x, p.y, '#8B4513'); // 屎爆
+                        showHitText(t.x, t.y - 20, `+${t.score}`);
+                        
+                        // 目標反應 (加速逃跑)
+                        t.vx *= 3; 
+                        t.hit = true; // 標記被打中
+
+                        poops.splice(i, 1);
+                        break; // 一坨屎只能打一個人
+                    }
+                }
+            }
+
+            // 更新目標
+            for (let i = targets.length - 1; i >= 0; i--) {
+                let t = targets[i];
+                t.x += t.vx;
+                t.walking += 0.2;
+                
+                if (t.x < -100 || t.x > width + 100) {
+                    targets.splice(i, 1);
+                }
+            }
+
+            // 更新粒子
+            for(let i=particles.length-1; i>=0; i--) {
+                let p = particles[i];
+                p.x += p.vx;
+                p.y += p.vy;
+                p.life--;
+                if(p.life <= 0) particles.splice(i, 1);
+            }
+        }
+
+        function drawBird() {
+            ctx.save();
+            ctx.translate(bird.x, bird.y);
+            if (bird.vx < 0) ctx.scale(-1, 1); // 轉向
+
+            // 身體
+            ctx.fillStyle = '#A9A9A9';
+            ctx.beginPath();
+            ctx.ellipse(0, 0, 30, 20, 0, 0, Math.PI*2);
+            ctx.fill();
+            
+            // 頭
+            ctx.fillStyle = '#808080';
+            ctx.beginPath();
+            ctx.arc(20, -10, 15, 0, Math.PI*2);
+            ctx.fill();
+            
+            // 眼睛
+            ctx.fillStyle = 'white';
+            ctx.beginPath();
+            ctx.arc(25, -15, 5, 0, Math.PI*2);
+            ctx.fill();
+            ctx.fillStyle = 'black';
+            ctx.beginPath();
+            ctx.arc(27, -15, 2, 0, Math.PI*2);
+            ctx.fill();
+
+            // 嘴巴
+            ctx.fillStyle = 'orange';
+            ctx.beginPath();
+            ctx.moveTo(30, -10);
+            ctx.lineTo(40, -5);
+            ctx.lineTo(30, 0);
+            ctx.fill();
+
+            // 翅膀 (拍動)
+            ctx.fillStyle = '#696969';
+            ctx.beginPath();
+            if (bird.flap > 0.5) {
+                // 上拍
+                ctx.moveTo(-10, -5);
+                ctx.quadraticCurveTo(0, -30, 20, -10);
+            } else {
+                // 下拍
+                ctx.moveTo(-10, 5);
+                ctx.quadraticCurveTo(0, 30, 20, 5);
+            }
+            ctx.fill();
+
+            ctx.restore();
+        }
+
+        function drawTarget(t) {
+            ctx.save();
+            ctx.translate(t.x, t.y);
+            if (t.vx < 0) ctx.scale(-1, 1); // 轉向
+
+            if (t.hit) ctx.fillStyle = '#8B4513'; // 被屎打中變咖啡色
+            else ctx.fillStyle = t.type === 'police' ? '#00008B' : (t.type === 'car' ? 'red' : '#333');
+
+            if (t.type === 'car') {
+                // 畫車
+                ctx.fillRect(0, 10, 80, 20); // 車身
+                ctx.fillStyle = '#87CEEB';
+                ctx.fillRect(20, 0, 40, 15); // 窗戶
+                ctx.fillStyle = 'black';
+                ctx.beginPath(); ctx.arc(15, 30, 8, 0, Math.PI*2); ctx.fill(); // 輪
+                ctx.beginPath(); ctx.arc(65, 30, 8, 0, Math.PI*2); ctx.fill();
+            } else {
+                // 畫人
+                const legOffset = Math.sin(t.walking) * 5;
+                
+                // 頭
+                ctx.beginPath(); ctx.arc(15, 5, 10, 0, Math.PI*2); ctx.fill();
+                // 身體
+                ctx.fillRect(5, 15, 20, 25);
+                // 腳 (走路)
+                ctx.strokeStyle = ctx.fillStyle;
+                ctx.lineWidth = 4;
+                ctx.beginPath(); ctx.moveTo(10, 40); ctx.lineTo(5, 50 + legOffset); ctx.stroke();
+                ctx.beginPath(); ctx.moveTo(20, 40); ctx.lineTo(25, 50 - legOffset); ctx.stroke();
+            }
+
+            ctx.restore();
+        }
+
+        function render() {
+            ctx.clearRect(0, 0, width, height);
+
+            // 地板
+            ctx.fillStyle = '#808080';
+            ctx.fillRect(0, height - 50, width, 50);
+            ctx.fillStyle = '#90EE90'; // 草地
+            ctx.fillRect(0, height - 60, width, 10);
+
+            // 畫目標
+            targets.forEach(t => drawTarget(t));
+
+            // 畫大便
+            ctx.fillStyle = '#fff'; // 鴿子屎通常是白+黑
+            poops.forEach(p => {
+                ctx.beginPath();
+                ctx.arc(p.x, p.y, 5, 0, Math.PI*2);
+                ctx.fill();
+                ctx.fillStyle = '#8B4513'; // 核心是深色
+                ctx.beginPath();
+                ctx.arc(p.x, p.y, 2, 0, Math.PI*2);
+                ctx.fill();
+                ctx.fillStyle = '#fff'; // Reset
+            });
+
+            // 畫粒子
+            particles.forEach(p => {
+                ctx.fillStyle = p.color;
+                ctx.globalAlpha = p.life / 30;
+                ctx.beginPath(); ctx.arc(p.x, p.y, 3, 0, Math.PI*2); ctx.fill();
+                ctx.globalAlpha = 1;
+            });
+
+            // 畫鴿子
+            drawBird();
+        }
+
+        function loop() {
+            update();
+            render();
+            if (gameRunning) requestAnimationFrame(loop);
+        }
+    </script>
+</body>
+</html>

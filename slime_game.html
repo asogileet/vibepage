@@ -1,0 +1,363 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>貪吃史萊姆 (Hungry Slime)</title>
+    <style>
+        body {
+            margin: 0;
+            overflow: hidden;
+            background-color: #222;
+            color: white;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            user-select: none;
+        }
+        #gameCanvas {
+            background-color: #333;
+            box-shadow: 0 0 20px rgba(0,0,0,0.5);
+            cursor: none; /* 隱藏滑鼠游標 */
+        }
+        #ui {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            pointer-events: none;
+        }
+        h1 { margin: 0; font-size: 24px; color: #81f481; text-shadow: 0 0 5px #81f481; }
+        p { margin: 5px 0 0; color: #ccc; }
+        #score { font-size: 20px; font-weight: bold; color: #fff; }
+        #gameOver {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            text-align: center;
+            background: rgba(0, 0, 0, 0.85);
+            padding: 40px;
+            border-radius: 15px;
+            display: none;
+            border: 2px solid #81f481;
+        }
+        button {
+            background: #81f481;
+            border: none;
+            padding: 10px 20px;
+            font-size: 18px;
+            cursor: pointer;
+            border-radius: 5px;
+            color: #222;
+            font-weight: bold;
+            margin-top: 20px;
+        }
+        button:hover {
+            background: #5cd65c;
+        }
+    </style>
+</head>
+<body>
+
+    <div id="ui">
+        <h1>貪吃史萊姆</h1>
+        <p>分數: <span id="score">0</span></p>
+        <p style="font-size: 14px; opacity: 0.7;">移動滑鼠來控制史萊姆，吃掉藍球！避開紅球！</p>
+    </div>
+
+    <canvas id="gameCanvas"></canvas>
+
+    <div id="gameOver">
+        <h2 style="color: #ff6666; font-size: 30px;">遊戲結束!</h2>
+        <p>最終分數: <span id="finalScore">0</span></p>
+        <button onclick="resetGame()">再玩一次</button>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        const scoreEl = document.getElementById('score');
+        const finalScoreEl = document.getElementById('finalScore');
+        const gameOverEl = document.getElementById('gameOver');
+
+        let width, height;
+        let score = 0;
+        let gameRunning = true;
+        let frameCount = 0;
+
+        // 玩家史萊姆
+        const player = {
+            x: 0,
+            y: 0,
+            radius: 20,
+            targetRadius: 20,
+            color: '#81f481',
+            speed: 0.1 // Lerp speed for smooth movement
+        };
+
+        // 滑鼠位置
+        const mouse = { x: 0, y: 0 };
+
+        // 遊戲物件
+        let foods = [];
+        let enemies = [];
+        let particles = [];
+
+        function resize() {
+            width = window.innerWidth;
+            height = window.innerHeight;
+            canvas.width = width;
+            canvas.height = height;
+        }
+
+        window.addEventListener('resize', resize);
+        resize();
+
+        // 初始位置
+        player.x = width / 2;
+        player.y = height / 2;
+        mouse.x = width / 2;
+        mouse.y = height / 2;
+
+        window.addEventListener('mousemove', (e) => {
+            mouse.x = e.clientX;
+            mouse.y = e.clientY;
+        });
+        
+        // 觸控支援
+        window.addEventListener('touchmove', (e) => {
+            e.preventDefault();
+            mouse.x = e.touches[0].clientX;
+            mouse.y = e.touches[0].clientY;
+        }, { passive: false });
+
+        function spawnFood() {
+            const r = Math.random() * 5 + 5; // 5-10
+            const x = Math.random() * (width - 2 * r) + r;
+            const y = Math.random() * (height - 2 * r) + r;
+            const color = `hsl(${Math.random() * 60 + 180}, 100%, 70%)`; // Blue-ish
+            foods.push({ x, y, r, color });
+        }
+
+        function spawnEnemy() {
+            const r = Math.random() * 10 + 10; // 10-20
+            // 從邊緣生成
+            let x, y;
+            if (Math.random() < 0.5) {
+                x = Math.random() < 0.5 ? -r : width + r;
+                y = Math.random() * height;
+            } else {
+                x = Math.random() * width;
+                y = Math.random() < 0.5 ? -r : height + r;
+            }
+            
+            // 指向玩家的方向向量
+            const angle = Math.atan2(player.y - y, player.x - x);
+            const speed = Math.random() * 2 + 1;
+            const velocity = {
+                x: Math.cos(angle) * speed,
+                y: Math.sin(angle) * speed
+            };
+
+            enemies.push({ x, y, r, color: '#ff6666', velocity });
+        }
+
+        function createParticles(x, y, color, count) {
+            for (let i = 0; i < count; i++) {
+                particles.push({
+                    x: x,
+                    y: y,
+                    radius: Math.random() * 3,
+                    color: color,
+                    velocity: {
+                        x: (Math.random() - 0.5) * 5,
+                        y: (Math.random() - 0.5) * 5
+                    },
+                    alpha: 1
+                });
+            }
+        }
+
+        function update() {
+            if (!gameRunning) return;
+
+            // 平滑移動 (Lerp)
+            player.x += (mouse.x - player.x) * player.speed;
+            player.y += (mouse.y - player.y) * player.speed;
+            
+            // 史萊姆呼吸效果 (大小微調)
+            player.targetRadius = 20 + score * 0.5;
+            // 限制最大半徑
+            if(player.targetRadius > 100) player.targetRadius = 100;
+            
+            // 彈性動畫
+            player.radius += (player.targetRadius - player.radius) * 0.1;
+
+            // 生成食物
+            if (frameCount % 30 === 0 && foods.length < 30) {
+                spawnFood();
+            }
+
+            // 生成敵人 (難度隨分數增加)
+            let spawnRate = 120;
+            if (score > 20) spawnRate = 90;
+            if (score > 50) spawnRate = 60;
+            
+            if (frameCount % spawnRate === 0) {
+                spawnEnemy();
+            }
+
+            // 更新粒子
+            particles.forEach((p, index) => {
+                p.velocity.x *= 0.95; // 摩擦力
+                p.velocity.y *= 0.95;
+                p.x += p.velocity.x;
+                p.y += p.velocity.y;
+                p.alpha -= 0.02;
+                if (p.alpha <= 0) {
+                    particles.splice(index, 1);
+                }
+            });
+
+            // 更新食物
+            foods.forEach((food, index) => {
+                const dist = Math.hypot(player.x - food.x, player.y - food.y);
+                
+                // 吃掉食物
+                if (dist - player.radius - food.r < 1) {
+                    score += 1;
+                    scoreEl.innerText = score;
+                    createParticles(food.x, food.y, food.color, 5);
+                    foods.splice(index, 1);
+                    // 稍微加速一點點
+                    if(player.speed < 0.2) player.speed += 0.001;
+                }
+            });
+
+            // 更新敵人
+            enemies.forEach((enemy, index) => {
+                enemy.x += enemy.velocity.x;
+                enemy.y += enemy.velocity.y;
+
+                // 邊界移除
+                if (enemy.x < -100 || enemy.x > width + 100 || enemy.y < -100 || enemy.y > height + 100) {
+                    enemies.splice(index, 1);
+                    return;
+                }
+
+                const dist = Math.hypot(player.x - enemy.x, player.y - enemy.y);
+
+                // 碰撞檢測
+                if (dist - player.radius - enemy.r < 1) {
+                    gameOver();
+                }
+            });
+
+            frameCount++;
+            requestAnimationFrame(render);
+        }
+
+        function render() {
+            // 清除畫布 (帶透明度製造拖尾效果)
+            ctx.fillStyle = 'rgba(51, 51, 51, 0.3)';
+            ctx.fillRect(0, 0, width, height);
+
+            // 畫粒子
+            particles.forEach(p => {
+                ctx.save();
+                ctx.globalAlpha = p.alpha;
+                ctx.beginPath();
+                ctx.arc(p.x, p.y, p.radius, 0, Math.PI * 2);
+                ctx.fillStyle = p.color;
+                ctx.fill();
+                ctx.restore();
+            });
+
+            // 畫食物
+            foods.forEach(food => {
+                ctx.beginPath();
+                ctx.arc(food.x, food.y, food.r, 0, Math.PI * 2);
+                ctx.fillStyle = food.color;
+                ctx.shadowBlur = 10;
+                ctx.shadowColor = food.color;
+                ctx.fill();
+                ctx.shadowBlur = 0;
+            });
+
+            // 畫敵人
+            enemies.forEach(enemy => {
+                ctx.beginPath();
+                ctx.arc(enemy.x, enemy.y, enemy.r, 0, Math.PI * 2);
+                ctx.fillStyle = enemy.color;
+                ctx.strokeStyle = '#fff';
+                ctx.lineWidth = 2;
+                ctx.fill();
+                ctx.stroke();
+            });
+
+            // 畫玩家史萊姆
+            ctx.beginPath();
+            // 讓史萊姆有點不規則形狀 (假裝在蠕動)
+            const wobble = Math.sin(frameCount * 0.1) * 2;
+            ctx.arc(player.x, player.y, player.radius + wobble, 0, Math.PI * 2);
+            ctx.fillStyle = player.color;
+            ctx.shadowBlur = 20;
+            ctx.shadowColor = player.color;
+            ctx.fill();
+            
+            // 眼睛
+            ctx.fillStyle = 'white';
+            const eyeOffset = player.radius * 0.3;
+            ctx.beginPath();
+            ctx.arc(player.x - eyeOffset, player.y - eyeOffset, player.radius * 0.25, 0, Math.PI * 2);
+            ctx.arc(player.x + eyeOffset, player.y - eyeOffset, player.radius * 0.25, 0, Math.PI * 2);
+            ctx.fill();
+            
+            ctx.fillStyle = 'black';
+            // 眼珠跟隨滑鼠 (簡單版)
+            ctx.beginPath();
+            ctx.arc(player.x - eyeOffset, player.y - eyeOffset, player.radius * 0.1, 0, Math.PI * 2);
+            ctx.arc(player.x + eyeOffset, player.y - eyeOffset, player.radius * 0.1, 0, Math.PI * 2);
+            ctx.fill();
+
+            ctx.shadowBlur = 0;
+
+            if (gameRunning) {
+                requestAnimationFrame(update);
+            }
+        }
+
+        function gameOver() {
+            gameRunning = false;
+            finalScoreEl.innerText = score;
+            gameOverEl.style.display = 'block';
+            canvas.style.cursor = 'default';
+        }
+
+        function resetGame() {
+            gameRunning = true;
+            score = 0;
+            scoreEl.innerText = '0';
+            gameOverEl.style.display = 'none';
+            canvas.style.cursor = 'none';
+            
+            foods = [];
+            enemies = [];
+            particles = [];
+            
+            player.x = width / 2;
+            player.y = height / 2;
+            player.radius = 20;
+            player.speed = 0.1;
+            
+            update();
+        }
+
+        // 啟動遊戲 loop
+        update();
+
+    </script>
+</body>
+</html>
