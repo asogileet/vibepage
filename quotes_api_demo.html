@@ -1,0 +1,301 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Quotes API Demo</title>
+    <style>
+        :root {
+            --bg: #0f172a;
+            --panel: rgba(15, 23, 42, 0.78);
+            --panel-border: rgba(255, 255, 255, 0.12);
+            --text: #e2e8f0;
+            --muted: #94a3b8;
+            --accent: #f59e0b;
+            --accent-2: #38bdf8;
+        }
+
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+            margin: 0;
+            min-height: 100vh;
+            font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+            color: var(--text);
+            background:
+                radial-gradient(circle at top left, rgba(245, 158, 11, 0.22), transparent 35%),
+                radial-gradient(circle at bottom right, rgba(56, 189, 248, 0.18), transparent 30%),
+                linear-gradient(135deg, #020617, #0f172a 50%, #111827);
+            display: grid;
+            place-items: center;
+            padding: 24px;
+        }
+
+        .shell {
+            width: min(920px, 100%);
+            background: var(--panel);
+            border: 1px solid var(--panel-border);
+            border-radius: 24px;
+            box-shadow: 0 24px 80px rgba(0, 0, 0, 0.35);
+            padding: 28px;
+            backdrop-filter: blur(18px);
+        }
+
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            gap: 16px;
+            margin-bottom: 24px;
+            flex-wrap: wrap;
+        }
+
+        h1 {
+            margin: 0;
+            font-size: clamp(2rem, 4vw, 3.2rem);
+            line-height: 1.05;
+        }
+
+        .subtitle {
+            margin: 8px 0 0;
+            color: var(--muted);
+        }
+
+        .badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            padding: 10px 14px;
+            border-radius: 999px;
+            background: rgba(245, 158, 11, 0.12);
+            border: 1px solid rgba(245, 158, 11, 0.25);
+            color: #fde68a;
+            font-size: 0.92rem;
+            white-space: nowrap;
+        }
+
+        .quote-card {
+            padding: 24px;
+            border-radius: 20px;
+            background: rgba(15, 23, 42, 0.72);
+            border: 1px solid var(--panel-border);
+            min-height: 220px;
+            display: grid;
+            gap: 16px;
+            align-content: center;
+        }
+
+        .quote-text {
+            font-size: clamp(1.1rem, 2.2vw, 1.7rem);
+            line-height: 1.6;
+            margin: 0;
+        }
+
+        .quote-zh {
+            margin: 0;
+            color: #cbd5e1;
+            font-size: clamp(1rem, 2vw, 1.3rem);
+            line-height: 1.7;
+        }
+
+        .meta {
+            display: flex;
+            justify-content: space-between;
+            gap: 12px;
+            flex-wrap: wrap;
+            color: var(--muted);
+            font-size: 0.92rem;
+        }
+
+        .controls {
+            display: flex;
+            gap: 12px;
+            flex-wrap: wrap;
+            margin-top: 18px;
+        }
+
+        button {
+            border: 0;
+            border-radius: 14px;
+            padding: 12px 18px;
+            font-size: 1rem;
+            cursor: pointer;
+            transition: transform 0.15s ease, opacity 0.15s ease;
+        }
+
+        button:hover {
+            transform: translateY(-1px);
+        }
+
+        .primary {
+            background: linear-gradient(135deg, var(--accent), #fb7185);
+            color: #111827;
+            font-weight: 700;
+        }
+
+        .secondary {
+            background: rgba(148, 163, 184, 0.16);
+            color: var(--text);
+            border: 1px solid rgba(148, 163, 184, 0.2);
+        }
+
+        .search {
+            display: grid;
+            grid-template-columns: minmax(0, 1fr) auto;
+            gap: 12px;
+            margin-top: 18px;
+        }
+
+        input {
+            width: 100%;
+            padding: 12px 14px;
+            border-radius: 14px;
+            border: 1px solid rgba(148, 163, 184, 0.2);
+            background: rgba(15, 23, 42, 0.72);
+            color: var(--text);
+            font-size: 1rem;
+        }
+
+        .results {
+            margin-top: 18px;
+            display: grid;
+            gap: 10px;
+        }
+
+        .result-item {
+            padding: 14px 16px;
+            border-radius: 16px;
+            background: rgba(255, 255, 255, 0.04);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+        }
+
+        .result-item strong {
+            display: block;
+            margin-bottom: 6px;
+        }
+
+        .status {
+            min-height: 24px;
+            margin-top: 12px;
+            color: var(--accent-2);
+        }
+
+        @media (max-width: 640px) {
+            .shell {
+                padding: 20px;
+                border-radius: 20px;
+            }
+
+            .search {
+                grid-template-columns: 1fr;
+            }
+
+            button {
+                width: 100%;
+            }
+        }
+    </style>
+</head>
+<body>
+    <main class="shell">
+        <div class="header">
+            <div>
+                <h1>Quotes API Demo</h1>
+                <p class="subtitle">這個頁面示範其他 HTML 如何共用 <strong>quotes.json</strong> 與 <strong>quotes-api.js</strong>。</p>
+            </div>
+            <div class="badge">Static front-end API helper</div>
+        </div>
+
+        <section class="quote-card">
+            <p class="quote-text" id="quoteEn">載入中...</p>
+            <p class="quote-zh" id="quoteZh"></p>
+            <div class="meta">
+                <span id="quoteId">ID: -</span>
+                <span id="quoteCount">總數: -</span>
+            </div>
+        </section>
+
+        <div class="controls">
+            <button class="primary" id="randomBtn">隨機一句</button>
+            <button class="secondary" id="copyBtn">複製英文</button>
+        </div>
+
+        <div class="search">
+            <input id="searchInput" type="text" placeholder="搜尋英文或中文關鍵字，例如 love、成功" />
+            <button class="secondary" id="searchBtn">搜尋</button>
+        </div>
+
+        <div class="status" id="status"></div>
+        <div class="results" id="results"></div>
+    </main>
+
+    <script src="quotes-api.js"></script>
+    <script>
+        const quoteEn = document.getElementById('quoteEn');
+        const quoteZh = document.getElementById('quoteZh');
+        const quoteId = document.getElementById('quoteId');
+        const quoteCount = document.getElementById('quoteCount');
+        const status = document.getElementById('status');
+        const results = document.getElementById('results');
+        const searchInput = document.getElementById('searchInput');
+
+        async function renderRandomQuote() {
+            const quote = await QuoteAPI.getRandomQuote();
+            if (!quote) {
+                status.textContent = '找不到任何 quotes 資料。';
+                return;
+            }
+
+            quoteEn.textContent = quote.en;
+            quoteZh.textContent = quote.zh;
+            quoteId.textContent = `ID: ${quote.id}`;
+            const allQuotes = await QuoteAPI.loadQuotes();
+            quoteCount.textContent = `總數: ${allQuotes.length}`;
+            status.textContent = '已載入一則隨機名言。';
+            results.innerHTML = '';
+        }
+
+        async function handleSearch() {
+            const keyword = searchInput.value.trim();
+            if (!keyword) {
+                status.textContent = '請先輸入關鍵字。';
+                return;
+            }
+
+            const matches = await QuoteAPI.searchQuotes(keyword);
+            status.textContent = `找到 ${matches.length} 筆結果。`;
+            results.innerHTML = matches.slice(0, 8).map((quote) => `
+                <article class="result-item">
+                    <strong>#${quote.id}</strong>
+                    <div>${quote.en}</div>
+                    <div>${quote.zh}</div>
+                </article>
+            `).join('');
+        }
+
+        document.getElementById('randomBtn').addEventListener('click', renderRandomQuote);
+        document.getElementById('copyBtn').addEventListener('click', async () => {
+            const text = quoteEn.textContent.trim();
+            if (!text || text === '載入中...') {
+                return;
+            }
+
+            await navigator.clipboard.writeText(text);
+            status.textContent = '英文已複製到剪貼簿。';
+        });
+        document.getElementById('searchBtn').addEventListener('click', handleSearch);
+        searchInput.addEventListener('keydown', (event) => {
+            if (event.key === 'Enter') {
+                handleSearch();
+            }
+        });
+
+        renderRandomQuote().catch((error) => {
+            status.textContent = error.message;
+            quoteEn.textContent = '載入失敗';
+        });
+    </script>
+</body>
+</html>

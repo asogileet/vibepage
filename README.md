@@ -63,3 +63,17 @@
 「妳的時候，我也會到。
 爸爸的心很大，很大，很大，
 所以可以同時裝下你們兩個。」
+
+## 名言資料共用方式
+
+如果其他 HTML 想讀取 `quotes.json`，可以直接載入 `quotes-api.js`：
+
+```html
+<script src="quotes-api.js"></script>
+<script>
+	const quote = await QuoteAPI.getRandomQuote();
+	console.log(quote.en, quote.zh);
+</script>
+```
+
+也可以直接 `fetch('quotes.json')`，這兩種方式都能在同一個網站底下共用資料。
