@@ -1,0 +1,282 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>高鐵時刻表查詢 - Master 的遊戲大廳</title>
+    <style>
+        /* Base styles from index.html */
+        body {
+            margin: 0;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #1a2a6c, #b21f1f, #fdbb2d);
+            background-size: 400% 400%;
+            animation: gradientBG 15s ease infinite;
+            color: white;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 20px;
+        }
+
+        @keyframes gradientBG {
+            0% { background-position: 0% 50%; }
+            50% { background-position: 100% 50%; }
+            100% { background-position: 0% 50%; }
+        }
+
+        h1 {
+            text-align: center;
+            font-size: 2.5rem;
+            margin-bottom: 20px;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.5);
+        }
+
+        .query-card {
+            background: rgba(255, 255, 255, 0.15);
+            backdrop-filter: blur(10px);
+            border-radius: 15px;
+            padding: 20px;
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            width: 100%;
+            max-width: 800px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.2);
+            margin-bottom: 20px;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 15px;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .input-group {
+            display: flex;
+            flex-direction: column;
+            gap: 5px;
+        }
+
+        label {
+            font-size: 0.9rem;
+            opacity: 0.9;
+        }
+
+        select option {
+            background: #1a1a2e;
+            color: white;
+        }
+
+        input, select, button {
+            padding: 10px;
+            border-radius: 8px;
+            border: 1px solid rgba(255, 255, 255, 0.3);
+            background: rgba(255, 255, 255, 0.2);
+            color: white;
+            font-size: 1rem;
+            outline: none;
+        }
+
+        input[type="date"]::-webkit-calendar-picker-indicator {
+            filter: invert(1);
+        }
+
+        button {
+            background: #ff4757;
+            cursor: pointer;
+            border: none;
+            transition: background 0.3s, transform 0.2s;
+            font-weight: bold;
+            min-width: 100px;
+            margin-top: 15px;
+        }
+
+        button:hover {
+            background: #ff6b81;
+            transform: scale(1.05);
+        }
+
+        button:active {
+            transform: scale(0.95);
+        }
+
+        .results-container {
+            width: 100%;
+            max-width: 800px;
+            overflow-x: auto;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            background: rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(10px);
+            border-radius: 15px;
+            overflow: hidden;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.2);
+        }
+
+        th, td {
+            padding: 15px;
+            text-align: center;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        th {
+            background: rgba(255, 255, 255, 0.2);
+            font-weight: bold;
+        }
+
+        tr.highlight td {
+            background: rgba(255, 215, 0, 0.3);
+            font-weight: bold;
+            border-top: 2px solid #ffd700;
+            border-bottom: 2px solid #ffd700;
+        }
+
+        tr:last-child td {
+            border-bottom: none;
+        }
+
+        .loading {
+            margin: 20px;
+            font-style: italic;
+            opacity: 0.8;
+        }
+
+        .back-link {
+            margin-top: 20px;
+            color: white;
+            text-decoration: none;
+            font-size: 0.9rem;
+            opacity: 0.7;
+            transition: opacity 0.3s;
+        }
+
+        .back-link:hover {
+            opacity: 1;
+            text-decoration: underline;
+        }
+
+        @media (max-width: 600px) {
+            .query-card {
+                flex-direction: column;
+                align-items: stretch;
+            }
+            button {
+                margin-top: 0;
+            }
+        }
+    </style>
+</head>
+<body>
+
+    <h1>🚄 高鐵時刻表查詢</h1>
+
+    <div class="query-card">
+        <div class="input-group">
+            <label for="date">日期</label>
+            <input type="date" id="date">
+        </div>
+        <div class="input-group">
+            <label for="direction">方向</label>
+            <select id="direction">
+                <option value="S">南下 (台北 → 台南)</option>
+                <option value="N">北上 (台南 → 台北)</option>
+            </select>
+        </div>
+        <button id="queryBtn">查詢時刻</button>
+    </div>
+
+    <div id="loading" class="loading" style="display: none;">正在讀取高鐵數據...</div>
+
+    <div class="results-container">
+        <table id="resultsTable" style="display: none;">
+            <thead>
+                <tr>
+                    <th>車次</th>
+                    <th>出發</th>
+                    <th>到達</th>
+                    <th>行車時間</th>
+                    <th>自由座</th>
+                </tr>
+            </thead>
+            <tbody id="resultsBody">
+            </tbody>
+        </table>
+    </div>
+
+    <a href="index.html" class="back-link">← 回到大廳</a>
+
+    <script>
+        // Set default date to today
+        const today = new Date().toISOString().split('T')[0];
+        document.getElementById('date').value = today;
+
+        const queryBtn = document.getElementById('queryBtn');
+        const resultsTable = document.getElementById('resultsTable');
+        const resultsBody = document.getElementById('resultsBody');
+        const loading = document.getElementById('loading');
+
+        queryBtn.addEventListener('click', async () => {
+            const date = document.getElementById('date').value;
+            const direction = document.getElementById('direction').value;
+
+            loading.style.display = 'block';
+            resultsTable.style.display = 'none';
+            resultsBody.innerHTML = '';
+
+            try {
+                const url = `http://localhost:8000/api/schedule?date=${date}&direction=${direction}`;
+                const response = await fetch(url);
+                if (!response.ok) throw new Error('Network response was not ok');
+
+                const json = await response.json();
+                if (json.error) throw new Error(json.error);
+
+                const data = json.data;
+
+                const now = new Date();
+                const nowMinutes = now.getHours() * 60 + now.getMinutes();
+
+                data.forEach(train => {
+                    const row = document.createElement('tr');
+                    const [dh, dm] = train.DepartureTime.split(':').map(Number);
+                    const depMinutes = dh * 60 + dm;
+                    const diff = Math.abs(depMinutes - nowMinutes);
+                    if (diff <= 60) {
+                        row.className = 'highlight';
+                    }
+                    row.innerHTML = `
+                        <td>${train.TrainNo}</td>
+                        <td>${train.DepartureTime}</td>
+                        <td>${train.DestinationTime}</td>
+                        <td>${train.Duration}</td>
+                        <td>${train.NonReservedCar}</td>
+                    `;
+                    resultsBody.appendChild(row);
+                });
+
+                const highlighted = resultsBody.querySelector('.highlight');
+                if (highlighted) {
+                    setTimeout(() => highlighted.scrollIntoView({ behavior: 'smooth', block: 'center' }), 100);
+                }
+
+                if (data.length === 0) {
+                    const row = document.createElement('tr');
+                    row.innerHTML = `<td colspan="5">找不到符合時間的車次</td>`;
+                    resultsBody.appendChild(row);
+                }
+
+                resultsTable.style.display = 'table';
+            } catch (error) {
+                console.error('Fetch error:', error);
+                alert('無法讀取時刻表，請確認 FastAPI server 已啟動 (uvicorn script.thsr_api:app --reload)');
+            } finally {
+                loading.style.display = 'none';
+            }
+        });
+
+        // Notes: Backend runs via FastAPI (script/thsr_api.py)
+    </script>
+</body>
+</html>
