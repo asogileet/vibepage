@@ -226,8 +226,10 @@
             resultsBody.innerHTML = '';
 
             try {
-                const url = `http://localhost:8000/api/schedule?date=${date}&direction=${direction}`;
-                const response = await fetch(url);
+                const url = `https://trevor-semestral-woundedly.ngrok-free.dev/api/schedule?date=${date}&direction=${direction}`;
+                const response = await fetch(url, {
+                    headers: { 'ngrok-skip-browser-warning': 'true' }
+                });
                 if (!response.ok) throw new Error('Network response was not ok');
 
                 const json = await response.json();
