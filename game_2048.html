@@ -112,11 +112,9 @@
             let g = document.getElementById('grid'); 
             g.innerHTML = ''; 
             for (let i = 0; i < 4; i++) for (let j = 0; j < 4; j++) { 
-                let c = document.createElement('div'); 
-                let v = grid[i][j]; 
-                c.className = 'cell cell-' + (v > 2048 ? 2048 : v); 
-                if (v === 0) c.className = 'cell cell-0';
-                else c.className = 'cell cell-' + (v > 2048 ? 2048 : v);
+                let c = document.createElement('div');
+                let v = grid[i][j];
+                c.className = 'cell cell-' + (v === 0 ? 0 : v > 2048 ? 2048 : v);
                 c.textContent = v || ''; 
                 if (newTilePos && newTilePos.i === i && newTilePos.j === j) c.classList.add('cell-new');
                 g.appendChild(c); 
@@ -146,20 +144,26 @@
             return merged; 
         }
         
-        function rotateGrid() { 
-            let newGrid = []; 
-            for (let i = 0; i < 4; i++) newGrid.push([grid[3-i][0], grid[3-i][1], grid[3-i][2], grid[3-i][3]]); 
-            grid = newGrid; 
+        function rotateGrid() {
+            let newGrid = [];
+            for (let i = 0; i < 4; i++) {
+                newGrid[i] = [];
+                for (let j = 0; j < 4; j++) {
+                    newGrid[i][j] = grid[3 - j][i];
+                }
+            }
+            grid = newGrid;
         }
         
-        function move(direction) { 
-            if (isAnimating) return; 
-            let prev = JSON.stringify(grid); 
-            
+        function move(direction) {
+            if (isAnimating) return;
+            let prev = JSON.stringify(grid);
+
             // 0=上, 1=右, 2=下, 3=左
-            for (let i = 0; i < direction; i++) rotateGrid(); 
-            for (let i = 0; i < 4; i++) grid[i] = slide(grid[i]); 
-            for (let i = 0; i < (4 - direction) % 4; i++) rotateGrid(); 
+            let rots = (7 - direction) % 4; // up→3, right→2, down→1, left→0
+            for (let i = 0; i < rots; i++) rotateGrid();
+            for (let i = 0; i < 4; i++) grid[i] = slide(grid[i]);
+            for (let i = 0; i < (4 - rots) % 4; i++) rotateGrid();
             
             if (JSON.stringify(grid) !== prev) { 
                 isAnimating = true; 
