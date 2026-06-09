@@ -1,0 +1,1164 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Lily & Emily 零用錢存摺</title>
+<style>
+  * {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+  }
+
+  body {
+    font-family: 'Segoe UI', 'Noto Sans TC', sans-serif;
+    min-height: 100vh;
+    background: linear-gradient(135deg, #fce4ec 0%, #e8eaf6 50%, #e0f7fa 100%);
+    padding: 20px;
+    position: relative;
+    overflow-x: hidden;
+  }
+
+  /* ===== 浮動背景裝飾 ===== */
+  .bg-deco {
+    position: fixed;
+    border-radius: 50%;
+    opacity: 0.15;
+    pointer-events: none;
+    z-index: 0;
+  }
+  .bg-deco:nth-child(1) { width: 300px; height: 300px; background: #f48fb1; top: -80px; left: -80px; }
+  .bg-deco:nth-child(2) { width: 250px; height: 250px; background: #ce93d8; bottom: -60px; right: -60px; }
+  .bg-deco:nth-child(3) { width: 200px; height: 200px; background: #80deea; top: 40%; right: -50px; }
+  .bg-deco:nth-child(4) { width: 180px; height: 180px; background: #ffcc80; bottom: 20%; left: -40px; }
+
+  .container {
+    max-width: 1000px;
+    margin: 0 auto;
+    position: relative;
+    z-index: 1;
+  }
+
+  /* ===== 標題 ===== */
+  .header {
+    text-align: center;
+    padding: 30px 20px 20px;
+  }
+  .header h1 {
+    font-size: 2.4rem;
+    font-weight: 800;
+    background: linear-gradient(135deg, #e91e63, #9c27b0, #00bcd4);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+    letter-spacing: 2px;
+  }
+  .header p {
+    color: #666;
+    margin-top: 6px;
+    font-size: 1.05rem;
+  }
+
+  /* ===== 管理員按鈕 ===== */
+  .admin-toggle {
+    position: fixed;
+    top: 16px;
+    right: 20px;
+    z-index: 100;
+    background: rgba(255,255,255,0.7);
+    backdrop-filter: blur(6px);
+    border: 2px solid #ddd;
+    border-radius: 30px;
+    padding: 8px 18px;
+    font-size: 0.9rem;
+    cursor: pointer;
+    transition: all 0.3s;
+    color: #555;
+  }
+  .admin-toggle:hover {
+    background: #fff;
+    border-color: #e91e63;
+    color: #e91e63;
+    box-shadow: 0 2px 12px rgba(233,30,99,0.15);
+  }
+  .admin-toggle.active {
+    background: #e91e63;
+    color: #fff;
+    border-color: #e91e63;
+  }
+
+  /* ===== 孩子卡片 ===== */
+  .kids-row {
+    display: flex;
+    gap: 24px;
+    margin-bottom: 30px;
+    flex-wrap: wrap;
+    justify-content: center;
+  }
+
+  .kid-card {
+    flex: 1;
+    min-width: 280px;
+    max-width: 460px;
+    background: rgba(255,255,255,0.75);
+    backdrop-filter: blur(12px);
+    border-radius: 28px;
+    padding: 28px 24px 24px;
+    box-shadow: 0 8px 32px rgba(0,0,0,0.08);
+    border: 1px solid rgba(255,255,255,0.5);
+    transition: transform 0.3s, box-shadow 0.3s;
+    position: relative;
+    overflow: hidden;
+  }
+  .kid-card:hover {
+    transform: translateY(-4px);
+    box-shadow: 0 12px 40px rgba(0,0,0,0.12);
+  }
+  .kid-card::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 5px;
+  }
+  .kid-card.lily::before { background: linear-gradient(90deg, #f06292, #ffb74d); }
+  .kid-card.emily::before { background: linear-gradient(90deg, #4dd0e1, #ab47bc); }
+
+  .kid-header {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    margin-bottom: 16px;
+  }
+  .kid-avatar {
+    width: 56px; height: 56px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.8rem;
+    font-weight: 700;
+    color: #fff;
+    flex-shrink: 0;
+  }
+  .kid-card.lily .kid-avatar { background: linear-gradient(135deg, #f06292, #ffb74d); }
+  .kid-card.emily .kid-avatar { background: linear-gradient(135deg, #4dd0e1, #ab47bc); }
+
+  .kid-name {
+    font-size: 1.5rem;
+    font-weight: 700;
+    color: #333;
+  }
+  .kid-name small {
+    font-size: 0.8rem;
+    font-weight: 400;
+    color: #999;
+    display: block;
+    margin-top: 2px;
+  }
+
+  .balance-area {
+    text-align: center;
+    padding: 16px 0 10px;
+  }
+  .balance-label {
+    font-size: 0.85rem;
+    color: #999;
+    letter-spacing: 2px;
+  }
+  .balance-number {
+    font-size: 3.2rem;
+    font-weight: 800;
+    line-height: 1.1;
+    transition: color 0.3s;
+  }
+  .kid-card.lily .balance-number { color: #e91e63; }
+  .kid-card.emily .balance-number { color: #0097a7; }
+  .balance-number .currency {
+    font-size: 1.4rem;
+    font-weight: 600;
+    opacity: 0.6;
+  }
+  .balance-number.pop {
+    animation: pop 0.4s ease;
+  }
+  @keyframes pop {
+    0% { transform: scale(1); }
+    40% { transform: scale(1.2); }
+    100% { transform: scale(1); }
+  }
+
+  .latest-reason {
+    text-align: center;
+    font-size: 0.9rem;
+    color: #888;
+    min-height: 1.4em;
+    margin-top: 4px;
+  }
+  .latest-reason span {
+    background: rgba(0,0,0,0.04);
+    padding: 2px 10px;
+    border-radius: 10px;
+  }
+
+  /* ===== 交易歷史 ===== */
+  .history-section {
+    margin-top: 14px;
+    max-height: 200px;
+    overflow-y: auto;
+    scrollbar-width: thin;
+  }
+  .history-section::-webkit-scrollbar { width: 4px; }
+  .history-section::-webkit-scrollbar-thumb { background: #ddd; border-radius: 4px; }
+
+  .history-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 8px 6px;
+    border-bottom: 1px solid rgba(0,0,0,0.04);
+    font-size: 0.85rem;
+    gap: 8px;
+  }
+  .history-item:last-child { border-bottom: none; }
+  .history-item .h-date { color: #aaa; font-size: 0.75rem; min-width: 72px; }
+  .history-item .h-reason { flex: 1; color: #555; }
+  .history-item .h-amount {
+    font-weight: 700;
+    min-width: 50px;
+    text-align: right;
+  }
+  .history-item .h-amount.positive { color: #43a047; }
+  .history-item .h-amount.negative { color: #e53935; }
+  .history-empty {
+    text-align: center;
+    color: #bbb;
+    padding: 16px 0;
+    font-size: 0.9rem;
+  }
+
+  /* ===== 管理後台 ===== */
+  .admin-panel {
+    background: rgba(255,255,255,0.85);
+    backdrop-filter: blur(16px);
+    border-radius: 24px;
+    padding: 28px;
+    margin-top: 10px;
+    box-shadow: 0 8px 32px rgba(0,0,0,0.08);
+    border: 1px solid rgba(255,255,255,0.5);
+    display: none;
+    animation: slideDown 0.4s ease;
+  }
+  .admin-panel.show { display: block; }
+
+  @keyframes slideDown {
+    from { opacity: 0; transform: translateY(-20px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  .admin-panel h2 {
+    font-size: 1.3rem;
+    color: #333;
+    margin-bottom: 20px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  .admin-panel h2::before { content: '⚙️'; }
+
+  .form-row {
+    display: flex;
+    gap: 14px;
+    flex-wrap: wrap;
+    align-items: flex-end;
+    margin-bottom: 18px;
+  }
+  .form-group {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+  .form-group label {
+    font-size: 0.8rem;
+    color: #888;
+    font-weight: 600;
+  }
+  .form-group input, .form-group select {
+    padding: 10px 14px;
+    border: 2px solid #e0e0e0;
+    border-radius: 12px;
+    font-size: 0.95rem;
+    background: #fff;
+    outline: none;
+    transition: border-color 0.2s;
+    font-family: inherit;
+  }
+  .form-group input:focus, .form-group select:focus {
+    border-color: #e91e63;
+  }
+
+  .btn {
+    padding: 10px 24px;
+    border: none;
+    border-radius: 12px;
+    font-size: 0.95rem;
+    font-weight: 700;
+    cursor: pointer;
+    transition: all 0.25s;
+    font-family: inherit;
+  }
+  .btn-primary {
+    background: linear-gradient(135deg, #e91e63, #9c27b0);
+    color: #fff;
+    box-shadow: 0 4px 14px rgba(233,30,99,0.25);
+  }
+  .btn-primary:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 6px 20px rgba(233,30,99,0.35);
+  }
+  .btn-primary:active { transform: translateY(0); }
+
+  .btn-secondary {
+    background: #f5f5f5;
+    color: #555;
+    border: 2px solid #e0e0e0;
+  }
+  .btn-secondary:hover {
+    background: #eee;
+    border-color: #bbb;
+  }
+
+  .btn-danger {
+    background: #ffebee;
+    color: #c62828;
+    border: 2px solid #ef9a9a;
+  }
+  .btn-danger:hover {
+    background: #ffcdd2;
+  }
+
+  .btn-sm {
+    padding: 6px 14px;
+    font-size: 0.8rem;
+    border-radius: 8px;
+  }
+
+  .admin-actions {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+    margin-top: 20px;
+    padding-top: 18px;
+    border-top: 2px dashed #e0e0e0;
+  }
+
+  .json-status {
+    font-size: 0.85rem;
+    color: #888;
+    margin-top: 8px;
+  }
+  .json-status.success { color: #43a047; }
+  .json-status.error { color: #e53935; }
+
+  #fileInput { display: none; }
+
+  /* ===== 金幣動畫 ===== */
+  .coin-rain {
+    position: fixed;
+    pointer-events: none;
+    z-index: 999;
+  }
+  .coin {
+    position: absolute;
+    font-size: 2rem;
+    animation: coinFall 1.2s ease forwards;
+  }
+  @keyframes coinFall {
+    0% { opacity: 1; transform: translateY(0) rotate(0deg) scale(1); }
+    60% { opacity: 1; }
+    100% { opacity: 0; transform: translateY(-120px) rotate(360deg) scale(0.3); }
+  }
+
+  .confetti-container {
+    position: fixed;
+    top: 0; left: 0;
+    width: 100%; height: 100%;
+    pointer-events: none;
+    z-index: 999;
+    overflow: hidden;
+  }
+  .confetti {
+    position: absolute;
+    width: 10px; height: 10px;
+    animation: confettiFall 2s ease forwards;
+  }
+  @keyframes confettiFall {
+    0% { opacity: 1; transform: translateY(0) rotate(0deg); }
+    100% { opacity: 0; transform: translateY(100vh) rotate(720deg); }
+  }
+
+  /* ===== 全螢幕縮放檢視 ===== */
+  .zoom-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 500;
+    background: rgba(0,0,0,0.4);
+    backdrop-filter: blur(8px);
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.4s ease;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+  }
+  .zoom-overlay.open {
+    opacity: 1;
+    pointer-events: auto;
+  }
+
+  .zoom-card {
+    background: #fff;
+    border-radius: 40px;
+    max-width: 560px;
+    width: 100%;
+    max-height: 90vh;
+    overflow-y: auto;
+    padding: 40px 32px 32px;
+    box-shadow: 0 24px 64px rgba(0,0,0,0.2);
+    transform: scale(0.85) translateY(30px);
+    transition: transform 0.45s cubic-bezier(0.34, 1.56, 0.64, 1);
+    position: relative;
+    scrollbar-width: thin;
+  }
+  .zoom-overlay.open .zoom-card {
+    transform: scale(1) translateY(0);
+  }
+
+  .zoom-card::-webkit-scrollbar { width: 4px; }
+  .zoom-card::-webkit-scrollbar-thumb { background: #ddd; border-radius: 4px; }
+
+  .zoom-close {
+    position: absolute;
+    top: 14px; right: 18px;
+    background: none;
+    border: none;
+    font-size: 1.6rem;
+    cursor: pointer;
+    color: #999;
+    transition: color 0.2s, transform 0.2s;
+    width: 40px; height: 40px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 50%;
+  }
+  .zoom-close:hover {
+    color: #333;
+    transform: rotate(90deg);
+    background: #f5f5f5;
+  }
+
+  .zoom-card .kid-header {
+    margin-bottom: 8px;
+  }
+  .zoom-card .kid-avatar {
+    width: 72px; height: 72px;
+    font-size: 2.4rem;
+  }
+  .zoom-card .kid-name {
+    font-size: 2rem;
+  }
+  .zoom-card .kid-name small {
+    font-size: 0.9rem;
+  }
+
+  .zoom-card .balance-number {
+    font-size: 4rem;
+  }
+  .zoom-card .balance-label {
+    font-size: 1rem;
+  }
+  .zoom-card .latest-reason {
+    font-size: 1.05rem;
+    margin-bottom: 16px;
+  }
+  .zoom-card .history-section {
+    max-height: none;
+  }
+  .zoom-card .history-item {
+    padding: 12px 8px;
+    font-size: 0.95rem;
+  }
+
+  .zoom-greeting {
+    text-align: center;
+    font-size: 1.2rem;
+    color: #888;
+    margin: 4px 0 12px;
+  }
+
+  /* ===== 煙火 Canvas ===== */
+  #fireworksCanvas {
+    position: fixed;
+    inset: 0;
+    z-index: 499;
+    pointer-events: none;
+  }
+
+  /* ===== Responsive ===== */
+  @media (max-width: 640px) {
+    body { padding: 12px; }
+    .header h1 { font-size: 1.6rem; }
+    .kid-card { min-width: 100%; }
+    .balance-number { font-size: 2.6rem; }
+    .admin-panel { padding: 18px; }
+    .form-row { flex-direction: column; }
+    .form-group input, .form-group select { width: 100%; }
+    .admin-toggle { top: 10px; right: 10px; padding: 6px 14px; font-size: 0.8rem; }
+    .zoom-card { padding: 28px 20px 24px; border-radius: 28px; }
+    .zoom-card .kid-avatar { width: 56px; height: 56px; font-size: 1.8rem; }
+    .zoom-card .kid-name { font-size: 1.5rem; }
+    .zoom-card .balance-number { font-size: 3rem; }
+  }
+</style>
+</head>
+<body>
+
+<div class="bg-deco"></div>
+<div class="bg-deco"></div>
+<div class="bg-deco"></div>
+<div class="bg-deco"></div>
+
+<button class="admin-toggle" id="adminToggle" onclick="toggleAdmin()">🔑 管理後台</button>
+
+<div class="container">
+  <div class="header">
+    <h1>🏦 Lily & Emily 零用錢存摺</h1>
+    <p>一起存錢，實現夢想！</p>
+  </div>
+
+  <!-- 孩子卡片 -->
+  <div class="kids-row">
+    <div class="kid-card lily" id="card-lily">
+      <div class="kid-header">
+        <div class="kid-avatar">🌸</div>
+        <div>
+          <div class="kid-name">Lily <small>姊姊</small></div>
+        </div>
+      </div>
+      <div class="balance-area">
+        <div class="balance-label">💰 目前存款</div>
+        <div class="balance-number" id="balance-lily">$0</div>
+      </div>
+      <div class="latest-reason" id="latest-lily"><span>還沒有記錄唷 ✨</span></div>
+      <div class="history-section" id="history-lily">
+        <div class="history-empty">還沒有交易記錄</div>
+      </div>
+    </div>
+
+    <div class="kid-card emily" id="card-emily">
+      <div class="kid-header">
+        <div class="kid-avatar">🌊</div>
+        <div>
+          <div class="kid-name">Emily <small>妹妹</small></div>
+        </div>
+      </div>
+      <div class="balance-area">
+        <div class="balance-label">💰 目前存款</div>
+        <div class="balance-number" id="balance-emily">$0</div>
+      </div>
+      <div class="latest-reason" id="latest-emily"><span>還沒有記錄唷 ✨</span></div>
+      <div class="history-section" id="history-emily">
+        <div class="history-empty">還沒有交易記錄</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 管理後台 -->
+  <div class="admin-panel" id="adminPanel">
+    <h2>管理後台</h2>
+
+    <div class="form-row">
+      <div class="form-group">
+        <label>誰的零用錢？</label>
+        <select id="childSelect">
+          <option value="lily">🌸 Lily（姊姊）</option>
+          <option value="emily">🌊 Emily（妹妹）</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>日期</label>
+        <input type="date" id="dateInput">
+      </div>
+      <div class="form-group">
+        <label>金額</label>
+        <input type="number" id="amountInput" placeholder="例如: 100" min="1">
+      </div>
+      <div class="form-group">
+        <label>理由</label>
+        <input type="text" id="reasonInput" placeholder="例如: 幫忙洗碗">
+      </div>
+      <button class="btn btn-primary" onclick="addTransaction()">➕ 存入</button>
+    </div>
+
+    <div class="admin-actions">
+      <button class="btn btn-secondary btn-sm" onclick="exportJSON()">📥 匯出 JSON</button>
+      <button class="btn btn-secondary btn-sm" onclick="document.getElementById('fileInput').click()">📤 匯入 JSON</button>
+      <input type="file" id="fileInput" accept=".json" onchange="importJSON(event)">
+      <button class="btn btn-danger btn-sm" onclick="resetData()">🗑️ 清空所有資料</button>
+    </div>
+    <div class="json-status" id="jsonStatus"></div>
+
+    <!-- 全部交易記錄 -->
+    <div style="margin-top:18px;">
+      <h3 style="font-size:1rem;color:#666;margin-bottom:8px;">📋 所有交易記錄</h3>
+      <div id="allTransactions" style="max-height:280px;overflow-y:auto;font-size:0.85rem;"></div>
+    </div>
+  </div>
+</div>
+
+<!-- 全螢幕縮放檢視 -->
+<div class="zoom-overlay" id="zoomOverlay" onclick="closeZoom(event)">
+  <div class="zoom-card" id="zoomCard" onclick="event.stopPropagation()">
+    <button class="zoom-close" onclick="closeZoom()">✕</button>
+    <div class="zoom-greeting" id="zoomGreeting">🎉 好棒棒！</div>
+    <div class="kid-header">
+      <div class="kid-avatar" id="zoomAvatar">🌸</div>
+      <div>
+        <div class="kid-name" id="zoomName">Lily <small>姊姊</small></div>
+      </div>
+    </div>
+    <div class="balance-area">
+      <div class="balance-label">💰 目前存款</div>
+      <div class="balance-number" id="zoomBalance">$0</div>
+    </div>
+    <div class="latest-reason" id="zoomLatest"><span>還沒有記錄唷 ✨</span></div>
+    <div class="history-section" id="zoomHistory"></div>
+  </div>
+</div>
+
+<!-- 煙火 Canvas -->
+<canvas id="fireworksCanvas"></canvas>
+
+<script>
+// ===== 資料 =====
+const STORAGE_KEY = 'allowance_data';
+const KIDS = { lily: 'Lily', emily: 'Emily' };
+const EMOJI = { lily: '🌸', emily: '🌊' };
+
+let data = loadData();
+
+function getDefaultData() {
+  return { transactions: [] };
+}
+
+function loadData() {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (parsed && Array.isArray(parsed.transactions)) return parsed;
+    }
+  } catch (e) { /* ignore */ }
+  return getDefaultData();
+}
+
+function saveData() {
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(data, null, 2));
+}
+
+function getBalance(child) {
+  return data.transactions
+    .filter(t => t.child === child)
+    .reduce((sum, t) => sum + t.amount, 0);
+}
+
+function getLatest(child) {
+  const items = data.transactions.filter(t => t.child === child);
+  if (items.length === 0) return null;
+  return items[items.length - 1];
+}
+
+function getHistory(child) {
+  return data.transactions.filter(t => t.child === child);
+}
+
+// ===== 渲染 =====
+function render() {
+  for (const child of ['lily', 'emily']) {
+    const balance = getBalance(child);
+    const balEl = document.getElementById(`balance-${child}`);
+    balEl.textContent = `$${balance}`;
+    balEl.classList.remove('pop');
+    void balEl.offsetWidth;
+    balEl.classList.add('pop');
+
+    const latest = getLatest(child);
+    const latestEl = document.getElementById(`latest-${child}`);
+    if (latest) {
+      const sign = latest.amount >= 0 ? '+' : '';
+      latestEl.innerHTML = `<span>${EMOJI[child]} ${latest.date}  ${sign}$${latest.amount}  — ${latest.reason}</span>`;
+    } else {
+      latestEl.innerHTML = `<span>還沒有記錄唷 ✨</span>`;
+    }
+
+    const history = getHistory(child);
+    const histEl = document.getElementById(`history-${child}`);
+    if (history.length === 0) {
+      histEl.innerHTML = `<div class="history-empty">還沒有交易記錄</div>`;
+    } else {
+      histEl.innerHTML = history.map(t => {
+        const sign = t.amount >= 0 ? '+' : '';
+        const cls = t.amount >= 0 ? 'positive' : 'negative';
+        return `<div class="history-item">
+          <span class="h-date">${t.date}</span>
+          <span class="h-reason">${t.reason}</span>
+          <span class="h-amount ${cls}">${sign}$${t.amount}</span>
+        </div>`;
+      }).join('');
+    }
+  }
+
+  // 全部交易記錄 (admin)
+  renderAllTransactions();
+  saveData();
+}
+
+function renderAllTransactions() {
+  const el = document.getElementById('allTransactions');
+  if (data.transactions.length === 0) {
+    el.innerHTML = '<div style="color:#bbb;text-align:center;padding:12px;">尚無記錄</div>';
+    return;
+  }
+  const rows = [...data.transactions].reverse().map(t => {
+    const sign = t.amount >= 0 ? '+' : '';
+    const cls = t.amount >= 0 ? 'positive' : 'negative';
+    const name = KIDS[t.child] || t.child;
+    const emoji = EMOJI[t.child] || '';
+    return `<div class="history-item">
+      <span class="h-date">${t.date}</span>
+      <span style="color:#999;min-width:50px;">${emoji} ${name}</span>
+      <span class="h-reason">${t.reason}</span>
+      <span class="h-amount ${cls}">${sign}$${t.amount}</span>
+    </div>`;
+  }).join('');
+  el.innerHTML = rows;
+}
+
+// ===== 新增交易 =====
+function addTransaction() {
+  const child = document.getElementById('childSelect').value;
+  const date = document.getElementById('dateInput').value;
+  const amount = parseInt(document.getElementById('amountInput').value);
+  const reason = document.getElementById('reasonInput').value.trim();
+
+  if (!date) { showStatus('請選擇日期', 'error'); return; }
+  if (!amount || amount <= 0) { showStatus('請輸入有效金額', 'error'); return; }
+  if (!reason) { showStatus('請輸入理由', 'error'); return; }
+
+  const tx = {
+    id: Date.now() + '_' + Math.random().toString(36).slice(2, 6),
+    child,
+    date,
+    amount,
+    reason,
+    createdAt: new Date().toISOString()
+  };
+
+  data.transactions.push(tx);
+  render();
+  spawnCoins(child, amount);
+  showStatus(`✅ ${KIDS[child]} 存入 $${amount} 成功！`, 'success');
+
+  // 清空表單
+  document.getElementById('amountInput').value = '';
+  document.getElementById('reasonInput').value = '';
+  document.getElementById('dateInput').value = '';
+}
+
+// ===== 金幣動畫 =====
+function spawnCoins(child, amount) {
+  const card = document.getElementById(`card-${child}`);
+  if (!card) return;
+  const rect = card.getBoundingClientRect();
+  const coinCount = Math.min(Math.floor(amount / 10) + 1, 12);
+  const emoji = child === 'lily' ? '🪙' : '🌟';
+
+  for (let i = 0; i < coinCount; i++) {
+    const coin = document.createElement('div');
+    coin.className = 'coin';
+    coin.textContent = emoji;
+    coin.style.left = (rect.left + Math.random() * rect.width) + 'px';
+    coin.style.top = (rect.top + rect.height * 0.5 + Math.random() * 40) + 'px';
+    coin.style.fontSize = (1.5 + Math.random() * 0.8) + 'rem';
+    coin.style.animationDuration = (0.8 + Math.random() * 0.6) + 's';
+    coin.style.animationDelay = (i * 0.06) + 's';
+    document.body.appendChild(coin);
+    setTimeout(() => coin.remove(), 2000);
+  }
+
+  // 如果是大筆金額 (>200) 放彩花
+  if (amount >= 200) {
+    spawnConfetti(card);
+  }
+}
+
+function spawnConfetti(card) {
+  const rect = card.getBoundingClientRect();
+  const colors = ['#e91e63','#9c27b0','#00bcd4','#ffeb3b','#ff5722','#4caf50','#f06292','#ab47bc'];
+  for (let i = 0; i < 40; i++) {
+    const el = document.createElement('div');
+    el.className = 'confetti';
+    el.style.left = (rect.left + Math.random() * rect.width) + 'px';
+    el.style.top = (rect.top + 10) + 'px';
+    el.style.background = colors[Math.floor(Math.random() * colors.length)];
+    el.style.width = (6 + Math.random() * 8) + 'px';
+    el.style.height = (6 + Math.random() * 8) + 'px';
+    el.style.borderRadius = Math.random() > 0.5 ? '50%' : '2px';
+    el.style.animationDuration = (1.5 + Math.random() * 1.5) + 's';
+    el.style.animationDelay = (Math.random() * 0.5) + 's';
+    document.body.appendChild(el);
+    setTimeout(() => el.remove(), 3500);
+  }
+}
+
+// ===== 點卡片縮放 =====
+let zoomKid = null;
+
+function openZoom(child) {
+  zoomKid = child;
+  const data_p = {
+    name: KIDS[child],
+    role: child === 'lily' ? '姊姊' : '妹妹',
+    emoji: EMOJI[child],
+    balance: getBalance(child),
+    latest: getLatest(child),
+    history: getHistory(child),
+  };
+
+  document.getElementById('zoomAvatar').textContent = data_p.emoji;
+  document.getElementById('zoomName').innerHTML = `${data_p.name} <small>${data_p.role}</small>`;
+  document.getElementById('zoomBalance').textContent = `$${data_p.balance}`;
+
+  const latestEl = document.getElementById('zoomLatest');
+  if (data_p.latest) {
+    const s = data_p.latest.amount >= 0 ? '+' : '';
+    latestEl.innerHTML = `<span>${data_p.emoji} ${data_p.latest.date} ${s}$${data_p.latest.amount} — ${data_p.latest.reason}</span>`;
+  } else {
+    latestEl.innerHTML = `<span>還沒有記錄唷 ✨</span>`;
+  }
+
+  const histEl = document.getElementById('zoomHistory');
+  if (data_p.history.length === 0) {
+    histEl.innerHTML = `<div class="history-empty">還沒有交易記錄</div>`;
+  } else {
+    const rows = [...data_p.history].reverse().map(t => {
+      const s = t.amount >= 0 ? '+' : '';
+      const c = t.amount >= 0 ? 'positive' : 'negative';
+      return `<div class="history-item">
+        <span class="h-date">${t.date}</span>
+        <span class="h-reason">${t.reason}</span>
+        <span class="h-amount ${c}">${s}$${t.amount}</span>
+      </div>`;
+    }).join('');
+    histEl.innerHTML = rows;
+  }
+
+  const greetings = ['🎉 好棒棒！', '🌟 繼續加油！', '💪 存錢達人！', '🌈 太厲害了！', '🎊 超級棒！', '🏆 讚讚讚！'];
+  document.getElementById('zoomGreeting').textContent = greetings[Math.floor(Math.random() * greetings.length)];
+
+  const overlay = document.getElementById('zoomOverlay');
+  overlay.classList.add('open');
+  document.body.style.overflow = 'hidden';
+
+  startFireworks();
+}
+
+function closeZoom(e) {
+  if (e && e.target !== e.currentTarget) return;
+  document.getElementById('zoomOverlay').classList.remove('open');
+  document.body.style.overflow = '';
+  zoomKid = null;
+  stopFireworks();
+}
+
+document.querySelectorAll('.kid-card').forEach(card => {
+  card.addEventListener('click', () => {
+    if (card.classList.contains('lily')) openZoom('lily');
+    else if (card.classList.contains('emily')) openZoom('emily');
+  });
+});
+
+// ===== Canvas 煙火 =====
+let fwCtx, fwW, fwH, fwAnimId, fwRunning = false;
+let particles = [];
+const rockets = [];
+
+function resizeCanvas() {
+  const c = document.getElementById('fireworksCanvas');
+  c.width = window.innerWidth;
+  c.height = window.innerHeight;
+  fwW = c.width;
+  fwH = c.height;
+}
+
+class Particle {
+  constructor(x, y, color) {
+    this.x = x; this.y = y;
+    this.color = color;
+    const angle = Math.random() * Math.PI * 2;
+    const speed = 2 + Math.random() * 5;
+    this.vx = Math.cos(angle) * speed;
+    this.vy = Math.sin(angle) * speed;
+    this.life = 1;
+    this.decay = 0.012 + Math.random() * 0.015;
+    this.size = 2 + Math.random() * 3;
+    this.trail = [];
+  }
+  update() {
+    this.trail.push({ x: this.x, y: this.y });
+    if (this.trail.length > 5) this.trail.shift();
+    this.vy += 0.05;
+    this.x += this.vx;
+    this.y += this.vy;
+    this.life -= this.decay;
+    this.size *= 0.98;
+  }
+  draw(ctx) {
+    ctx.globalAlpha = this.life * 0.8;
+    for (let i = 0; i < this.trail.length; i++) {
+      const a = (i / this.trail.length) * this.life * 0.4;
+      ctx.globalAlpha = a;
+      ctx.fillStyle = this.color;
+      ctx.beginPath();
+      ctx.arc(this.trail[i].x, this.trail[i].y, this.size * (i / this.trail.length) * 0.6, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    ctx.globalAlpha = this.life;
+    ctx.fillStyle = this.color;
+    ctx.beginPath();
+    ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.globalAlpha = 1;
+  }
+}
+
+function burst(x, y) {
+  const colors = ['#e91e63','#9c27b0','#00bcd4','#ffeb3b','#ff5722','#4caf50','#f06292','#ab47bc','#ff6f00','#76ff03'];
+  const count = 40 + Math.floor(Math.random() * 40);
+  for (let i = 0; i < count; i++) {
+    const color = colors[Math.floor(Math.random() * colors.length)];
+    const p = new Particle(x, y, color);
+    p.vx += (Math.random() - 0.5) * 2;
+    p.vy += (Math.random() - 0.5) * 2 - 2;
+    particles.push(p);
+  }
+}
+
+function launchRocket() {
+  const x = 60 + Math.random() * (fwW - 120);
+  const y = fwH;
+  const targetY = 40 + Math.random() * (fwH * 0.5);
+  const speed = 6 + Math.random() * 4;
+  rockets.push({ x, y, targetY, speed, alive: true });
+}
+
+function animateFireworks() {
+  fwCtx.clearRect(0, 0, fwW, fwH);
+
+  for (let i = rockets.length - 1; i >= 0; i--) {
+    const r = rockets[i];
+    if (!r.alive) { rockets.splice(i, 1); continue; }
+    const dy = r.targetY - r.y;
+    if (dy < 10) {
+      burst(r.x, r.y);
+      r.alive = false;
+      rockets.splice(i, 1);
+      continue;
+    }
+    const step = Math.min(r.speed, Math.abs(dy) * 0.08);
+    r.y += step;
+    fwCtx.fillStyle = 'rgba(255,255,200,0.9)';
+    fwCtx.beginPath();
+    fwCtx.arc(r.x, r.y, 3, 0, Math.PI * 2);
+    fwCtx.fill();
+  }
+
+  for (let i = particles.length - 1; i >= 0; i--) {
+    const p = particles[i];
+    p.update();
+    p.draw(fwCtx);
+    if (p.life <= 0 || p.size < 0.3) {
+      particles.splice(i, 1);
+    }
+  }
+
+  if (fwRunning) {
+    fwAnimId = requestAnimationFrame(animateFireworks);
+  }
+}
+
+function startFireworks() {
+  const canvas = document.getElementById('fireworksCanvas');
+  fwCtx = canvas.getContext('2d');
+  resizeCanvas();
+  particles = [];
+  rockets.length = 0;
+  fwRunning = true;
+
+  // initial bursts
+  for (let i = 0; i < 3; i++) {
+    setTimeout(() => {
+      if (!fwRunning) return;
+      burst(fwW * 0.2 + Math.random() * fwW * 0.6, fwH * 0.2 + Math.random() * fwH * 0.4);
+    }, i * 300);
+  }
+  animateFireworks();
+
+  // continuous rockets
+  if (fwRunning) {
+    fwRocketTimer = setInterval(() => {
+      if (!fwRunning) { clearInterval(fwRocketTimer); return; }
+      launchRocket();
+      if (Math.random() > 0.6) setTimeout(() => { if (fwRunning) launchRocket(); }, 200);
+    }, 500);
+  }
+}
+
+let fwRocketTimer;
+
+function stopFireworks() {
+  fwRunning = false;
+  if (fwAnimId) cancelAnimationFrame(fwAnimId);
+  if (fwRocketTimer) clearInterval(fwRocketTimer);
+  const canvas = document.getElementById('fireworksCanvas');
+  if (canvas) {
+    const ctx = canvas.getContext('2d');
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+  }
+  particles = [];
+  rockets.length = 0;
+}
+
+window.addEventListener('resize', resizeCanvas);
+
+// ===== 密碼驗證 =====
+const ADMIN_HASH = '49920bd0f3d5c668bd537b68f8ea5bafe4d060e0ec2bf17db21023d7c72a68dd';
+let adminUnlocked = false;
+
+async function hashPassword(input) {
+  const enc = new TextEncoder().encode(input);
+  const buf = await crypto.subtle.digest('SHA-256', enc);
+  return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2,'0')).join('');
+}
+
+async function verifyPassword(input) {
+  const h = await hashPassword(input);
+  return h === ADMIN_HASH;
+}
+
+// ===== 管理後台切換 =====
+async function toggleAdmin() {
+  const panel = document.getElementById('adminPanel');
+  const btn = document.getElementById('adminToggle');
+
+  if (panel.classList.contains('show')) {
+    panel.classList.remove('show');
+    btn.classList.remove('active');
+    btn.textContent = '🔑 管理後台';
+    return;
+  }
+
+  if (!adminUnlocked) {
+    const input = prompt('請輸入管理密碼：');
+    if (!input) return;
+    const ok = await verifyPassword(input);
+    if (!ok) {
+      alert('❌ 密碼錯誤！');
+      return;
+    }
+    adminUnlocked = true;
+  }
+
+  panel.classList.add('show');
+  btn.classList.add('active');
+  btn.textContent = '🔒 關閉後台';
+}
+
+// ===== JSON 匯出 / 匯入 =====
+function exportJSON() {
+  const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `allowance_${new Date().toISOString().slice(0,10)}.json`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+  showStatus('📥 JSON 檔案已下載！', 'success');
+}
+
+function importJSON(event) {
+  const file = event.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    try {
+      const imported = JSON.parse(e.target.result);
+      if (!imported || !Array.isArray(imported.transactions)) {
+        showStatus('❌ 無效的 JSON 格式', 'error');
+        return;
+      }
+      data = imported;
+      render();
+      showStatus(`📤 已匯入 ${data.transactions.length} 筆記錄！`, 'success');
+    } catch (err) {
+      showStatus('❌ 無法解析 JSON 檔案', 'error');
+    }
+  };
+  reader.readAsText(file);
+  event.target.value = '';
+}
+
+function resetData() {
+  if (!confirm('確定要清空所有零用錢資料嗎？這項操作無法復原！')) return;
+  if (!confirm('再次確認：所有資料將被刪除！')) return;
+  data = getDefaultData();
+  render();
+  showStatus('🗑️ 所有資料已清空', 'success');
+}
+
+function showStatus(msg, type) {
+  const el = document.getElementById('jsonStatus');
+  el.textContent = msg;
+  el.className = 'json-status ' + (type || '');
+  clearTimeout(el._timer);
+  el._timer = setTimeout(() => { el.textContent = ''; el.className = 'json-status'; }, 4000);
+}
+
+// ===== 設定今天日期 =====
+document.addEventListener('DOMContentLoaded', () => {
+  const today = new Date().toISOString().slice(0, 10);
+  document.getElementById('dateInput').value = today;
+  render();
+});
+
+// ===== 鍵盤快捷 =====
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape' && document.getElementById('zoomOverlay').classList.contains('open')) {
+    closeZoom();
+  }
+  if (e.key === 'Enter' && document.getElementById('adminPanel').classList.contains('show')) {
+    const active = document.activeElement;
+    if (active && (active.tagName === 'INPUT' || active.tagName === 'SELECT')) {
+      e.preventDefault();
+      addTransaction();
+    }
+  }
+});
+</script>
+
+</body>
+</html>
