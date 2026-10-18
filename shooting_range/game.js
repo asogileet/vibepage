@@ -30,6 +30,7 @@ class ShootingRange {
             shotsFired: 0,
             hits: 0,
             headshots: 0,
+            knockdowns: 0,
             totalDamage: 0
         };
 
@@ -43,9 +44,13 @@ class ShootingRange {
         };
         this.moveTime = 0;
 
-        // 靶高度 (地面垂直比例 0.2 ~ 0.98)
-        this.targetHeightRatio = 0.82;
+        // 靶場類型 ('cross' | 'knockdown' | 'balloon' | 'mixed') 與多排設定
+        this.targetType = 'cross';
+        this.rowCount = 1;
         this.targetCount = 5;
+        this.extraBalloons = false;
+        this.targetHeightRatio = 0.82;
+        this.rowRails = [];
 
         // 自訂圖片與顯示模式 ('circle' | 'rect' | 'full')
         this.uploadedImage = null;
@@ -60,9 +65,11 @@ class ShootingRange {
         // 即時同步預覽窗設定
         this.previewCanvas = document.getElementById('livePreviewCanvas');
         this.previewCtx = this.previewCanvas ? this.previewCanvas.getContext('2d') : null;
-        this.previewCloseUp = true; // 預設特寫視角 (頭像模式時放大看臉，整張模式時看全貌)
+        this.previewCloseUp = true; // 預設特寫視角
         this.currentPreviewCamScale = 1.25;
         this.previewDummy = new CrucifiedDummy(0, 0, 1.0, null, false);
+        this.previewKnockdown = new KnockdownPhotoTarget(0, 0, 1.0, null, false, 0);
+        this.previewBalloon = new BalloonTarget(0, 0, 1.0, null, false, 0, 0);
 
         // 圖片拖曳與雙指縮放狀態
         this.isDraggingImage = false;
@@ -88,37 +95,90 @@ class ShootingRange {
         this.canvas.height = this.height;
     }
 
-    setupDefaultTargets(count = 5) {
-        this.targetCount = count;
-        this.dummies = [];
-        const groundY = this.height * this.targetHeightRatio;
-        const spacing = this.width / (count + 1);
+    createSingleTarget(category, x, y, scale, row, colIndex) {
+        let target;
+        if (category === 'knockdown') {
+            target = new KnockdownPhotoTarget(x, y, scale, this.uploadedImage, this.isCustomFull, row);
+        } else if (category === 'balloon') {
+            target = new BalloonTarget(x, y, scale, this.uploadedImage, this.isCustomFull, row, row * 3 + colIndex);
+        } else {
+            target = new CrucifiedDummy(x, y, scale, this.uploadedImage, this.isCustomFull);
+            target.row = row;
+        }
+        target.dummyIndex = colIndex;
+        target.baseX = x;
+        target.baseY = y;
+        target.baseScale = scale;
+        target.customScale = this.customScale;
+        target.customOffsetX = this.customOffsetX;
+        target.customOffsetY = this.customOffsetY;
+        target.customShape = this.customShape;
+        target.headFrameScale = this.headFrameScale;
+        return target;
+    }
 
-        for (let i = 1; i <= count; i++) {
-            // 單一巨靶置中放大
-            const scale = count === 1 ? 1.15 : (0.9 + Math.random() * 0.2);
-            const x = count === 1 ? (this.width / 2) : (spacing * i + (Math.random() - 0.5) * 20);
-            const y = groundY;
-            const dummy = new CrucifiedDummy(x, y, scale, this.uploadedImage, this.isCustomFull);
-            dummy.dummyIndex = i;
-            dummy.baseX = x;
-            dummy.baseY = y;
-            dummy.baseScale = scale;
-            dummy.customScale = this.customScale;
-            dummy.customOffsetX = this.customOffsetX;
-            dummy.customOffsetY = this.customOffsetY;
-            dummy.customShape = this.customShape;
-            dummy.headFrameScale = this.headFrameScale;
-            this.dummies.push(dummy);
+    setupDefaultTargets(count = this.targetCount, rows = this.rowCount) {
+        this.targetCount = count;
+        this.rowCount = rows;
+        this.dummies = [];
+        this.rowRails = [];
+
+        const frontGroundY = this.height * this.targetHeightRatio;
+        // 多排時自動計算前後排的高度間距 (由遠排 r=0 到近排 r=rows-1)
+        const maxSpanY = Math.min(this.height * 0.48, (rows - 1) * 115);
+        const rowStepY = rows > 1 ? maxSpanY / (rows - 1) : 0;
+
+        for (let r = 0; r < rows; r++) {
+            // r=0 為最遠後排 (較高、微縮)，r=rows-1 為最近前排
+            const depthProgress = rows > 1 ? r / (rows - 1) : 1.0;
+            const rowY = frontGroundY - (rows - 1 - r) * rowStepY;
+            const depthScale = rows > 1 ? (0.68 + 0.32 * depthProgress) : 1.0;
+
+            this.rowRails.push({
+                row: r,
+                y: rowY,
+                scale: depthScale
+            });
+
+            const spacing = this.width / (count + 1);
+            // 偶數與奇數排微幅交錯，讓後排靶子從前排縫隙露出，像真實夜市靶台！
+            const staggerX = (rows > 1 && count > 1) ? ((r % 2 === 0 ? -1 : 1) * Math.min(28, spacing * 0.18)) : 0;
+
+            for (let i = 1; i <= count; i++) {
+                const baseUnitScale = count === 1 ? 1.15 : (count >= 9 ? 0.78 : 0.94);
+                const scale = baseUnitScale * depthScale;
+                const x = count === 1 ? (this.width / 2 + staggerX) : (spacing * i + staggerX);
+                const y = rowY;
+
+                let category = this.targetType;
+                if (this.targetType === 'mixed') {
+                    // 綜合夜市模式：倒靶與氣球交錯排列
+                    category = ((r + i) % 2 === 0) ? 'knockdown' : 'balloon';
+                }
+
+                const target = this.createSingleTarget(category, x, y, scale, r, i);
+                this.dummies.push(target);
+            }
+        }
+
+        // 若勾選「同場額外加放氣球」，在上方或穿插位置額外生成一排繽紛氣球
+        if (this.extraBalloons && this.targetType !== 'balloon') {
+            const balloonCount = Math.max(5, count + 1);
+            const bSpacing = this.width / (balloonCount + 1);
+            const topRailY = (this.rowRails[0] ? this.rowRails[0].y : frontGroundY) - (this.targetType === 'cross' ? 140 : 85);
+            for (let b = 1; b <= balloonCount; b++) {
+                const bx = bSpacing * b;
+                const by = Math.max(150, topRailY + (b % 2 === 0 ? -15 : 15));
+                const balloon = this.createSingleTarget('balloon', bx, by, 0.88, -1, b);
+                this.dummies.push(balloon);
+            }
         }
     }
 
     setupEventListeners() {
         window.addEventListener('resize', () => {
             this.initCanvasSize();
-            // 重新校正地面位置
-            const groundY = this.height * this.targetHeightRatio;
-            this.dummies.forEach(d => d.y = groundY);
+            this.setupDefaultTargets(this.targetCount, this.rowCount);
         });
 
         window.addEventListener('contextmenu', (e) => {
@@ -383,6 +443,32 @@ class ShootingRange {
         this.stats.hits++;
         let finalDamage = Math.round(weapon.damage * hit.multiplier);
 
+        if (dummy.targetCategory === 'balloon') {
+            this.stats.knockdowns++;
+            if (hit.crit) this.stats.headshots++;
+            const bx = hit.balloonCenterX || worldX;
+            const by = hit.balloonCenterY || worldY;
+            this.addFloatingText(bx, by - 15, `POP! 🎈 +${finalDamage}`, dummy.color || '#00ffcc', 26, true);
+            this.spawnBalloonPopParticles(bx, by, dummy.color || '#ff2a55');
+            dummy.applyImpulse(hit.localX, hit.localY, weapon.force, finalDamage, false, hit);
+            this.stats.totalDamage += finalDamage;
+            return;
+        }
+
+        if (dummy.targetCategory === 'knockdown') {
+            this.stats.knockdowns++;
+            if (hit.crit) {
+                this.stats.headshots++;
+                this.addFloatingText(worldX, worldY - 22, `BULLSEYE! 🎯 -${finalDamage}`, '#ff3344', 28, true);
+            } else {
+                this.addFloatingText(worldX, worldY - 16, `倒靶! -${finalDamage}`, '#00e5ff', 22, false);
+            }
+            this.stats.totalDamage += finalDamage;
+            dummy.applyImpulse(hit.localX, hit.localY, weapon.force, finalDamage, false, hit);
+            this.spawnImpactParticles(worldX, worldY, '#ffd54f', 14);
+            return;
+        }
+
         if (hit.crit) {
             this.stats.headshots++;
             if (window.soundFX) window.soundFX.playHit(true);
@@ -408,17 +494,39 @@ class ShootingRange {
         // 巨大爆炸特效
         this.spawnExplosionParticles(x, y);
 
-        // 對周圍所有十字架施加衝擊波
+        // 對周圍所有靶子/氣球施加衝擊波
         for (let dummy of this.dummies) {
-            const dist = Math.hypot(dummy.x - x, (dummy.y - 150) - y);
+            const targetCenterY = dummy.targetCategory === 'balloon'
+                ? dummy.getBalloonCenter().y
+                : (dummy.y - 120 * dummy.scale);
+            const dist = Math.hypot(dummy.x - x, targetCenterY - y);
             if (dist < radius) {
                 const ratio = 1 - (dist / radius);
                 const appliedForce = force * ratio;
                 const appliedDmg = Math.round(damage * ratio);
-                dummy.applyImpulse((dummy.x - x) * 0.2, -100, appliedForce, appliedDmg);
-                this.addFloatingText(dummy.x, dummy.y - 200, `-${appliedDmg}`, '#ff4400', 24, false);
+                if (dummy.targetCategory === 'balloon' && !dummy.isPopped) {
+                    const bc = dummy.getBalloonCenter();
+                    this.stats.hits++;
+                    this.stats.knockdowns++;
+                    this.stats.totalDamage += appliedDmg;
+                    this.spawnBalloonPopParticles(bc.x, bc.y, dummy.color);
+                    dummy.applyImpulse(0, 0, appliedForce, appliedDmg);
+                    this.addFloatingText(bc.x, bc.y - 20, `POP! 🎈`, dummy.color, 24, true);
+                } else if (dummy.targetCategory === 'knockdown' && !dummy.isDown) {
+                    this.stats.hits++;
+                    this.stats.knockdowns++;
+                    this.stats.totalDamage += appliedDmg;
+                    dummy.applyImpulse((dummy.x - x) * 0.2, -80, appliedForce, appliedDmg);
+                    this.addFloatingText(dummy.x, dummy.y - 140, `BOOM! -${appliedDmg}`, '#ff4400', 24, true);
+                } else if (dummy.targetCategory === 'cross') {
+                    this.stats.hits++;
+                    this.stats.totalDamage += appliedDmg;
+                    dummy.applyImpulse((dummy.x - x) * 0.2, -100, appliedForce, appliedDmg);
+                    this.addFloatingText(dummy.x, dummy.y - 200, `-${appliedDmg}`, '#ff4400', 24, false);
+                }
             }
         }
+        this.updateStatsUI();
     }
 
     handleTomatoImpact(x, y, targetDummy) {
@@ -426,22 +534,55 @@ class ShootingRange {
         // 番茄噴射粒子
         this.spawnTomatoParticles(x, y);
 
-        if (targetDummy) {
-            const hit = targetDummy.hitTest(x, y);
+        for (let i = this.dummies.length - 1; i >= 0; i--) {
+            const dummy = this.dummies[i];
+            const hit = dummy.hitTest(x, y);
             if (hit) {
-                targetDummy.applyImpulse(hit.localX, hit.localY, 15, 12, true, hit);
-                this.addFloatingText(x, y - 10, 'SPLAT! 🍅', '#ff3333', 22, false);
-            }
-        } else {
-            // 找最近的十字架是否碰上
-            for (let dummy of this.dummies) {
-                const hit = dummy.hitTest(x, y);
-                if (hit) {
-                    dummy.applyImpulse(hit.localX, hit.localY, 15, 12, true, hit);
+                this.stats.hits++;
+                if (dummy.targetCategory === 'balloon') {
+                    this.stats.knockdowns++;
+                    const bc = dummy.getBalloonCenter();
+                    this.spawnBalloonPopParticles(bc.x, bc.y, dummy.color);
+                    dummy.applyImpulse(hit.localX, hit.localY, 20, 20, true, hit);
+                    this.addFloatingText(bc.x, bc.y - 10, 'SPLAT POP! 🍅🎈', '#ff3333', 24, true);
+                } else {
+                    if (dummy.targetCategory === 'knockdown') this.stats.knockdowns++;
+                    dummy.applyImpulse(hit.localX, hit.localY, 18, 15, true, hit);
                     this.addFloatingText(x, y - 10, 'SPLAT! 🍅', '#ff3333', 22, false);
-                    break;
                 }
+                this.updateStatsUI();
+                break;
             }
+        }
+    }
+
+    spawnBalloonPopParticles(x, y, color) {
+        // 氣球瞬間爆開的擴散光圈
+        this.particles.push({
+            type: 'shockwave',
+            x, y,
+            radius: 15,
+            maxRadius: 95,
+            color: color,
+            life: 0.22,
+            maxLife: 0.22
+        });
+
+        // 繽紛橡膠碎片與彩帶粒子
+        const confettiColors = [color, '#ffffff', '#ffea00', '#00e5ff', '#ff4081'];
+        for (let i = 0; i < 26; i++) {
+            const angle = Math.random() * Math.PI * 2;
+            const speed = 90 + Math.random() * 260;
+            this.particles.push({
+                type: 'spark',
+                x, y,
+                vx: Math.cos(angle) * speed,
+                vy: Math.sin(angle) * speed - 80,
+                radius: 3 + Math.random() * 4.5,
+                color: confettiColors[i % confettiColors.length],
+                life: 0.4 + Math.random() * 0.35,
+                maxLife: 0.75
+            });
         }
     }
 
@@ -702,38 +843,106 @@ class ShootingRange {
         }
         ctx.restore();
 
-        // 同步預覽人偶的屬性
-        const pd = this.previewDummy;
-        pd.customImage = this.uploadedImage;
-        pd.isCustomFull = this.isCustomFull;
-        pd.customScale = this.customScale;
-        pd.customOffsetX = this.customOffsetX;
-        pd.customOffsetY = this.customOffsetY;
-        pd.customShape = this.customShape;
-        pd.headFrameScale = this.headFrameScale;
-        pd.dummyType = this.dummies[0] ? this.dummies[0].dummyType : 0;
-
         ctx.save();
-        // 決定預覽相機的縮放與對焦中心
-        if (!this.isCustomFull && this.previewCloseUp) {
-            // 頭像特寫模式：對焦在十字架頂部頭像 (0, -250)
-            const camScale = Math.min(1.35, 1.55 / Math.max(1.0, this.headFrameScale * 0.75));
+        if (this.targetType === 'knockdown' || this.targetType === 'mixed') {
+            const pk = this.previewKnockdown;
+            pk.customImage = this.uploadedImage;
+            pk.isCustomFull = this.isCustomFull;
+            pk.customScale = this.customScale;
+            pk.customOffsetX = this.customOffsetX;
+            pk.customOffsetY = this.customOffsetY;
+            pk.customShape = this.customShape;
+            pk.headFrameScale = this.headFrameScale;
+            pk.updateDimensions();
+
+            const camScale = this.isCustomFull ? 0.65 : Math.min(0.95, 1.15 / Math.max(1.0, this.headFrameScale * 0.8));
             this.currentPreviewCamScale = camScale;
-            ctx.translate(w / 2, h * 0.56);
+            ctx.translate(w / 2, h * 0.88);
             ctx.scale(camScale, camScale);
-            ctx.translate(0, 250);
+            pk.draw(ctx, true);
+        } else if (this.targetType === 'balloon') {
+            const pb = this.previewBalloon;
+            pb.customImage = this.uploadedImage;
+            pb.isCustomFull = this.isCustomFull;
+            pb.customScale = this.customScale;
+            pb.customOffsetX = this.customOffsetX;
+            pb.customOffsetY = this.customOffsetY;
+            pb.customShape = this.customShape;
+            pb.headFrameScale = this.headFrameScale;
+            pb.updateDimensions();
+
+            const camScale = Math.min(0.95, 1.15 / Math.max(1.0, this.headFrameScale * 0.8));
+            this.currentPreviewCamScale = camScale;
+            ctx.translate(w / 2, h * 0.94);
+            ctx.scale(camScale, camScale);
+            pb.draw(ctx, true);
         } else {
-            // 全貌模式 (整張相片模式 或 切換為全貌視角)：對焦在十字架中心 (0, -170)
-            const camScale = 0.46;
-            this.currentPreviewCamScale = camScale;
-            ctx.translate(w / 2, h * 0.53);
-            ctx.scale(camScale, camScale);
-            ctx.translate(0, 170);
+            // 同步預覽人偶的屬性
+            const pd = this.previewDummy;
+            pd.customImage = this.uploadedImage;
+            pd.isCustomFull = this.isCustomFull;
+            pd.customScale = this.customScale;
+            pd.customOffsetX = this.customOffsetX;
+            pd.customOffsetY = this.customOffsetY;
+            pd.customShape = this.customShape;
+            pd.headFrameScale = this.headFrameScale;
+            pd.dummyType = this.dummies[0] ? this.dummies[0].dummyType : 0;
+
+            if (!this.isCustomFull && this.previewCloseUp) {
+                const camScale = Math.min(1.35, 1.55 / Math.max(1.0, this.headFrameScale * 0.75));
+                this.currentPreviewCamScale = camScale;
+                ctx.translate(w / 2, h * 0.56);
+                ctx.scale(camScale, camScale);
+                ctx.translate(0, 250);
+            } else {
+                const camScale = 0.46;
+                this.currentPreviewCamScale = camScale;
+                ctx.translate(w / 2, h * 0.53);
+                ctx.scale(camScale, camScale);
+                ctx.translate(0, 170);
+            }
+
+            pd.drawCross(ctx);
+            pd.drawDummy(ctx, true);
+        }
+        ctx.restore();
+    }
+
+    // 切換靶型模式: 'cross' | 'knockdown' | 'balloon' | 'mixed'
+    setTargetType(type) {
+        this.targetType = type;
+
+        document.querySelectorAll('.target-type-btn').forEach(btn => {
+            btn.classList.toggle('active', btn.dataset.targetType === type);
+        });
+
+        // 若切換至「相片倒靶」、「氣球靶場」或「綜合夜市」且原本只有 1 排，自動預設為 3 排，立即展現多排靶台效果！
+        if ((type === 'knockdown' || type === 'balloon' || type === 'mixed') && this.rowCount === 1) {
+            this.rowCount = 3;
+            const rowSelect = document.getElementById('rowCountSelect');
+            if (rowSelect) rowSelect.value = '3';
         }
 
-        pd.drawCross(ctx);
-        pd.drawDummy(ctx, true);
-        ctx.restore();
+        // 若已上傳照片且切換到「相片倒靶」，若原本為圓形可自動切換為整張相片或保留使用者設定
+        this.setupDefaultTargets(this.targetCount, this.rowCount);
+
+        const modeNames = {
+            cross: '✝️ 十字架人偶靶場',
+            knockdown: '🎯 多排相片倒靶 (打到往後倒！)',
+            balloon: '🎈 繽紛氣球靶場 (射到就破！)',
+            mixed: '🎪 綜合夜市靶台 (倒靶 + 氣球多排！)'
+        };
+        this.addFloatingText(this.width / 2, this.height * 0.42, modeNames[type] || '已切換靶場！', '#ffd54f', 26, true);
+    }
+
+    setRowCount(rows) {
+        this.rowCount = rows;
+        this.setupDefaultTargets(this.targetCount, this.rowCount);
+    }
+
+    setExtraBalloons(enabled) {
+        this.extraBalloons = enabled;
+        this.setupDefaultTargets(this.targetCount, this.rowCount);
     }
 
     // 處理圖片上傳 (自訂頭像或整張相片)
@@ -753,7 +962,7 @@ class ShootingRange {
                 this.setCustomOffsetY(0);
                 this.setCustomScale(1.0);
 
-                // 更新所有人偶的相片
+                // 更新所有靶子的相片
                 this.dummies.forEach(d => {
                     d.customImage = img;
                     d.isCustomFull = this.isCustomFull;
@@ -812,7 +1021,10 @@ class ShootingRange {
 
     setHeadFrameScale(scale) {
         this.headFrameScale = scale;
-        this.dummies.forEach(d => d.headFrameScale = scale);
+        this.dummies.forEach(d => {
+            d.headFrameScale = scale;
+            if (d.updateDimensions) d.updateDimensions();
+        });
         const label = document.getElementById('headFrameScaleLabel');
         if (label) {
             label.innerText = `${Math.round(scale * 100)}%${scale === 1.0 ? ' (標準)' : ''}`;
@@ -863,10 +1075,7 @@ class ShootingRange {
     setTargetHeight(ratio) {
         this.targetHeightRatio = ratio;
         const groundY = this.height * this.targetHeightRatio;
-        this.dummies.forEach(d => {
-            d.baseY = groundY;
-            d.y = groundY;
-        });
+        this.setupDefaultTargets(this.targetCount, this.rowCount);
         const valLabel = document.getElementById('targetHeightValLabel');
         if (valLabel) {
             valLabel.innerText = `${Math.round(ratio * 100)}% (${Math.round(groundY)}px)`;
@@ -874,64 +1083,66 @@ class ShootingRange {
     }
 
     setFullScreenFit() {
-        // 自動切換為「🖼️ 整張相片」模式 + 1 個十字架置中，確保整張相片完整全屏顯示！
+        // 自動切換為「🖼️ 整張相片」模式 + 1 排 1 個巨靶置中，確保整張相片完整全屏顯示！
         this.setDisplayMode('full');
 
-        const countSelect = document.getElementById('targetCountSelect');
-        if (countSelect && countSelect.value !== '1') {
-            countSelect.value = '1';
-            this.setTargetCount(1);
+        const rowSelect = document.getElementById('rowCountSelect');
+        if (rowSelect && rowSelect.value !== '1') {
+            rowSelect.value = '1';
+            this.rowCount = 1;
         }
+
+        const countSelect = document.getElementById('targetCountSelect');
+        if (countSelect) countSelect.value = '1';
+        this.setupDefaultTargets(1, 1);
 
         let fitScale = 2.8;
         if (this.uploadedImage) {
             const aspect = this.uploadedImage.width / this.uploadedImage.height;
             const dummyScale = this.dummies[0] ? this.dummies[0].scale : 1.15;
-            let baseH = 260 * dummyScale;
+            let baseH = (this.targetType === 'knockdown' ? 190 : 260) * dummyScale;
             let baseW = baseH * aspect;
             if (baseW > 300 * dummyScale) {
                 baseW = 300 * dummyScale;
                 baseH = baseW / aspect;
             }
-            fitScale = Math.min((this.height * 0.82) / baseH, (this.width * 0.90) / baseW);
+            fitScale = Math.min((this.height * 0.80) / baseH, (this.width * 0.88) / baseW);
         } else {
-            fitScale = (this.height * 0.85) / 320;
+            fitScale = (this.height * 0.82) / 300;
         }
 
         fitScale = Math.max(0.5, Math.min(fitScale, 10.0));
         fitScale = Math.round(fitScale * 20) / 20;
 
-        // 調整靶高度至最佳全屏位置
         this.setTargetHeight(0.88);
         const heightSlider = document.getElementById('targetHeightSlider');
         if (heightSlider) heightSlider.value = 88;
 
-        // 水平與垂直偏移歸零
         this.setCustomOffsetX(0);
         this.setCustomOffsetY(0);
-
-        // 套用縮放
         this.setCustomScale(fitScale);
 
         this.addFloatingText(this.width / 2, this.height * 0.45, '🖼️ 已切換為整張相片全屏巨靶！', '#00ffcc', 28, true);
     }
 
-    // 清理靶子上的彈孔和污漬
+    // 清理靶子上的彈孔、扶正所有倒靶、重新充氣所有氣球
     cleanAllTargets() {
         this.dummies.forEach(d => {
             d.respawn();
         });
-        this.addFloatingText(this.width / 2, this.height * 0.5, '✨ 全部十字架已修復翻新！', '#00ffcc', 26, true);
+        this.addFloatingText(this.width / 2, this.height * 0.5, '✨ 全部靶牌已立正・氣球已重新充氣！', '#00ffcc', 26, true);
     }
 
     setTargetCount(count) {
-        this.setupDefaultTargets(count);
+        this.setupDefaultTargets(count, this.rowCount);
     }
 
     updateStatsUI() {
         const acc = this.stats.shotsFired > 0 ? ((this.stats.hits / this.stats.shotsFired) * 100).toFixed(1) : 0;
         document.getElementById('statShots').innerText = this.stats.shotsFired;
         document.getElementById('statHits').innerText = this.stats.hits;
+        const kdEl = document.getElementById('statKnockdowns');
+        if (kdEl) kdEl.innerText = this.stats.knockdowns;
         document.getElementById('statHeadshots').innerText = this.stats.headshots;
         document.getElementById('statAccuracy').innerText = `${acc}%`;
         document.getElementById('statDamage').innerText = this.stats.totalDamage;
@@ -968,25 +1179,26 @@ class ShootingRange {
             this.muzzleFlashTimer -= dt;
         }
 
-        // 移動靶 3D 空間動態 (水平 X、垂直 Y、前後景深 Z)
+        // 移動靶 3D 空間動態 (支援多排正反向交錯移動！)
         const m = this.movement;
         if (m.horizontal || m.vertical || m.depth) {
             this.moveTime += dt * 2.2 * m.speed;
 
             this.dummies.forEach((d, idx) => {
-                const phase = idx * 1.3;
+                const rowDir = (d.row % 2 === 0) ? 1 : -1; // 奇偶排正反向交錯移動
+                const phase = (d.dummyIndex || idx) * 0.9 + (d.row || 0) * 1.4;
 
-                // 1. 水平移動 (左右 X軸)
+                // 1. 水平移動 (左右 X軸，多排時奇偶排反向交錯)
                 if (m.horizontal) {
-                    const ampX = (this.targetCount === 1 ? 260 : 130) * m.range;
-                    d.x = d.baseX + Math.sin(this.moveTime * 1.2 + phase) * ampX;
+                    const ampX = (this.targetCount === 1 ? 240 : 115) * m.range;
+                    d.x = d.baseX + Math.sin(this.moveTime * 1.15 * rowDir + phase) * ampX;
                 } else {
                     d.x = d.baseX;
                 }
 
                 // 2. 垂直移動 (上下 Y軸)
                 if (m.vertical) {
-                    const ampY = 85 * m.range;
+                    const ampY = 65 * m.range;
                     d.y = d.baseY + Math.cos(this.moveTime * 1.4 + phase) * ampY;
                 } else {
                     d.y = d.baseY;
@@ -994,16 +1206,15 @@ class ShootingRange {
 
                 // 3. 前後移動 (景深 Z軸 / 縮放)
                 if (m.depth) {
-                    // scale 在 baseScale * 0.55 ~ baseScale * 1.45 之間往返
-                    const zFactor = 1 + Math.sin(this.moveTime * 1.1 + phase) * 0.45 * m.range;
-                    d.setScale(d.baseScale * Math.max(0.2, zFactor));
+                    const zFactor = 1 + Math.sin(this.moveTime * 1.1 + phase) * 0.38 * m.range;
+                    d.setScale(d.baseScale * Math.max(0.25, zFactor));
                 } else {
                     d.setScale(d.baseScale);
                 }
             });
         }
 
-        // 更新十字架
+        // 更新所有靶子與氣球
         for (let dummy of this.dummies) {
             dummy.update(dt);
         }
@@ -1084,10 +1295,10 @@ class ShootingRange {
             ctx.translate(rx, ry);
         }
 
-        // 1. 繪製精美背景 (暗色工業/室外荒原靶場)
+        // 1. 繪製精美背景與多排靶台軌道
         this.renderBackground(ctx);
 
-        // 2. 繪製十字架人偶群
+        // 2. 繪製所有靶子 (由後排至前排依序繪製，確保前後遮擋透視正確)
         for (let dummy of this.dummies) {
             dummy.draw(ctx);
         }
@@ -1125,25 +1336,51 @@ class ShootingRange {
         ctx.fillStyle = skyGrad;
         ctx.fillRect(0, 0, this.width, this.height);
 
-        // 聚光燈從頂部照射十字架位置
-        for (let dummy of this.dummies) {
-            const spotGrad = ctx.createRadialGradient(dummy.x, dummy.y - 180, 20, dummy.x, dummy.y - 180, 260);
-            spotGrad.addColorStop(0, 'rgba(255, 230, 180, 0.12)');
+        // 聚光燈照射
+        const maxLights = Math.min(10, this.dummies.length);
+        for (let i = 0; i < maxLights; i++) {
+            const dummy = this.dummies[i];
+            const spotGrad = ctx.createRadialGradient(dummy.x, dummy.y - 140, 20, dummy.x, dummy.y - 140, 220);
+            spotGrad.addColorStop(0, 'rgba(255, 230, 180, 0.09)');
             spotGrad.addColorStop(1, 'rgba(255, 230, 180, 0)');
             ctx.fillStyle = spotGrad;
             ctx.beginPath();
-            ctx.arc(dummy.x, dummy.y - 180, 260, 0, Math.PI * 2);
+            ctx.arc(dummy.x, dummy.y - 140, 220, 0, Math.PI * 2);
             ctx.fill();
         }
 
         // 地面沙土/水泥 (隨靶高度動態聯動)
-        const groundY = this.height * (this.targetHeightRatio - 0.04);
+        const groundY = this.height * (this.targetHeightRatio - 0.02);
         const groundGrad = ctx.createLinearGradient(0, groundY, 0, this.height);
         groundGrad.addColorStop(0, '#1c1815');
         groundGrad.addColorStop(0.3, '#2a221b');
         groundGrad.addColorStop(1, '#110d0a');
         ctx.fillStyle = groundGrad;
         ctx.fillRect(0, groundY, this.width, Math.max(10, this.height - groundY));
+
+        // 繪製多排射擊場橫向金屬靶台軌道 (Shooting Gallery Multi-Row Shelf Rails)
+        if (this.rowRails && (this.rowRails.length > 1 || this.targetType !== 'cross')) {
+            for (let rail of this.rowRails) {
+                const ry = rail.y;
+                const railH = Math.max(8, 14 * rail.scale);
+
+                // 靶台橫樑深色金屬底
+                const railGrad = ctx.createLinearGradient(0, ry, 0, ry + railH);
+                railGrad.addColorStop(0, '#3a4149');
+                railGrad.addColorStop(0.5, '#22272e');
+                railGrad.addColorStop(1, '#121519');
+                ctx.fillStyle = railGrad;
+                ctx.fillRect(0, ry, this.width, railH);
+
+                // 軌道頂部霓虹導引細線
+                ctx.strokeStyle = 'rgba(255, 193, 7, 0.45)';
+                ctx.lineWidth = 2;
+                ctx.beginPath();
+                ctx.moveTo(0, ry);
+                ctx.lineTo(this.width, ry);
+                ctx.stroke();
+            }
+        }
 
         // 地平線警示警戒線
         ctx.strokeStyle = '#c0392b';
@@ -1153,10 +1390,10 @@ class ShootingRange {
         ctx.lineTo(this.width, groundY);
         ctx.stroke();
 
-        // 靶位距離標記線 (10m, 25m, 50m)
+        // 靶位距離標記線
         ctx.fillStyle = 'rgba(255,255,255,0.15)';
         ctx.font = 'bold 14px "Segoe UI", sans-serif';
-        ctx.fillText('◀ 靶場射擊線 RANGE-A 50M ▶', 40, groundY + 30);
+        ctx.fillText(`◀ 靶場射擊線 RANGE-A (${this.rowCount}排 x ${this.targetCount}靶) ▶`, 40, groundY + 30);
     }
 
     renderParticles(ctx) {
@@ -1169,8 +1406,9 @@ class ShootingRange {
                 ctx.fill();
             } else if (pt.type === 'shockwave') {
                 const alpha = Math.max(0, pt.life / pt.maxLife);
-                ctx.strokeStyle = `rgba(255, 200, 100, ${alpha * 0.8})`;
-                ctx.lineWidth = 8 * alpha;
+                ctx.strokeStyle = pt.color || `rgba(255, 200, 100, ${alpha * 0.8})`;
+                ctx.globalAlpha = alpha * 0.85;
+                ctx.lineWidth = 7 * alpha;
                 ctx.beginPath();
                 ctx.arc(pt.x, pt.y, pt.radius, 0, Math.PI * 2);
                 ctx.stroke();
@@ -1322,10 +1560,34 @@ window.addEventListener('DOMContentLoaded', () => {
         resetBtn.addEventListener('click', () => window.game.cleanAllTargets());
     }
 
+    // 靶場類型切換按鈕 (十字架靶 / 相片倒靶 / 氣球靶場 / 綜合夜市)
+    document.querySelectorAll('.target-type-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+            window.game.setTargetType(btn.dataset.targetType);
+        });
+    });
+
+    // 靶子排數選擇 (1~5 排)
+    const rowSelect = document.getElementById('rowCountSelect');
+    if (rowSelect) {
+        rowSelect.addEventListener('change', (e) => {
+            window.game.setRowCount(parseInt(e.target.value));
+        });
+    }
+
+    // 每排靶子數量選擇
     const countSelect = document.getElementById('targetCountSelect');
     if (countSelect) {
         countSelect.addEventListener('change', (e) => {
             window.game.setTargetCount(parseInt(e.target.value));
+        });
+    }
+
+    // 同場額外加放一整排氣球開關
+    const extraBalloonsToggle = document.getElementById('extraBalloonsToggle');
+    if (extraBalloonsToggle) {
+        extraBalloonsToggle.addEventListener('change', (e) => {
+            window.game.setExtraBalloons(e.target.checked);
         });
     }
 

@@ -27,37 +27,56 @@
                 <button id="btnHeaderClosePanel" class="btn mobile-only-btn" style="padding: 2px 8px; font-size: 11px; background: rgba(0, 229, 255, 0.2); border-color: #00e5ff; color: #00e5ff;">✕ 收合</button>
             </div>
 
-            <!-- 上傳人偶功能 -->
+            <!-- 上傳人偶/相片功能 -->
             <div class="control-group" style="margin-bottom: 10px;">
                 <label class="upload-box" style="padding: 10px;">
                     <div style="display: flex; align-items: center; gap: 8px;">
                         <span class="upload-icon" style="font-size: 20px;">📷</span>
-                        <span class="upload-text">點擊上傳相片 (頭像或整張相片)</span>
+                        <span class="upload-text">點擊上傳相片 (可直接當倒靶/氣球/人偶)</span>
                     </div>
                     <input type="file" id="imageUploadInput" accept="image/*">
                 </label>
                 <div class="preview-container" style="margin-top: 6px; justify-content: space-between;">
                     <div style="display: flex; align-items: center; gap: 8px; overflow: hidden;">
                         <img id="uploadPreview" alt="預覽圖">
-                        <span id="uploadStatus">預設呆萌/標靶人偶</span>
+                        <span id="uploadStatus">預設標靶/人偶 (上傳後自動套用)</span>
                     </div>
+                </div>
+            </div>
+
+            <!-- 靶型模式切換：十字架靶 / 相片倒靶(打到往後倒) / 氣球靶(射到就破) / 綜合夜市 -->
+            <div class="control-group" style="background: rgba(255, 193, 7, 0.08); padding: 9px 10px; border-radius: 10px; border: 1px solid rgba(255, 193, 7, 0.35); margin-bottom: 10px;">
+                <label class="control-label" style="color: #ffd54f; font-weight: 700; margin-bottom: 6px;">🎯 選擇靶場類型 (點擊切換玩法)：</label>
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 5px;">
+                    <button type="button" class="btn target-type-btn active" data-target-type="cross" style="padding: 6px 4px; font-size: 11px; font-weight: 700;">
+                        ✝️ 十字架人偶靶
+                    </button>
+                    <button type="button" class="btn target-type-btn" data-target-type="knockdown" style="padding: 6px 4px; font-size: 11px; font-weight: 700;">
+                        🎯 相片倒靶 (往後倒)
+                    </button>
+                    <button type="button" class="btn target-type-btn" data-target-type="balloon" style="padding: 6px 4px; font-size: 11px; font-weight: 700;">
+                        🎈 氣球靶場 (射破)
+                    </button>
+                    <button type="button" class="btn target-type-btn" data-target-type="mixed" style="padding: 6px 4px; font-size: 11px; font-weight: 700;">
+                        🎪 綜合夜市 (倒靶+氣球)
+                    </button>
                 </div>
             </div>
 
             <!-- 圖片顯示模式、即時互動預覽與位置調整 -->
             <div id="imageAdjustControls" class="control-group" style="background: rgba(0, 229, 255, 0.06); padding: 10px; border-radius: 10px; border: 1px solid rgba(0, 229, 255, 0.25);">
                 
-                <!-- 1. 三種顯示模式一鍵切換 (圓形頭像 / 方形頭像 / 整張相片) -->
-                <label class="control-label" style="color: #00e5ff; font-weight: 700; margin-bottom: 5px;">🖼️ 相片顯示模式 (點擊切換)：</label>
+                <!-- 1. 三種顯示模式一鍵切換 (圓形 / 方形 / 整張相片) -->
+                <label class="control-label" style="color: #00e5ff; font-weight: 700; margin-bottom: 5px;">🖼️ 相片裁切/顯示模式：</label>
                 <div class="mode-switch-group" style="display: flex; gap: 5px; margin-bottom: 8px;">
                     <button type="button" class="btn mode-btn active" data-mode="circle" style="flex: 1; padding: 6px 4px; font-size: 11px; font-weight: 600;">
-                        ⭕ 圓形頭像
+                        ⭕ 圓形靶/頭像
                     </button>
                     <button type="button" class="btn mode-btn" data-mode="rect" style="flex: 1; padding: 6px 4px; font-size: 11px; font-weight: 600;">
-                        ⬜ 方形頭像
+                        ⬜ 方形靶/立牌
                     </button>
                     <button type="button" class="btn mode-btn" data-mode="full" style="flex: 1.15; padding: 6px 4px; font-size: 11px; font-weight: 600;">
-                        🖼️ 整張相片
+                        🖼️ 整張相片當靶
                     </button>
                 </div>
 
@@ -103,10 +122,10 @@
                     <button id="btnFullScreenFit" class="btn btn-primary" style="flex: 1.6; padding: 3px 4px; font-size: 11px; background: linear-gradient(90deg, #ff5722, #e91e63); border: none;">🖥️ 整張全屏巨靶</button>
                 </div>
 
-                <!-- 4. 頭框本身大小調整 (僅在圓形/方形頭像模式顯示) -->
+                <!-- 4. 靶框/頭框尺寸調整 -->
                 <div id="headFrameSizeRow" style="margin-top: 8px; padding-top: 6px; border-top: 1px dashed rgba(255,255,255,0.12);">
                     <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 2px;">
-                        <label class="control-label" style="margin: 0; color: #ffca28; font-weight: 600;">👤 頭像框尺寸 (大頭模式)：</label>
+                        <label class="control-label" style="margin: 0; color: #ffca28; font-weight: 600;">👤 靶框/頭像尺寸：</label>
                         <span id="headFrameScaleLabel" style="font-size: 11px; color: #ffca28; font-weight: bold;">100% (標準)</span>
                     </div>
                     <input type="range" id="headFrameScaleSlider" min="0.8" max="4.0" step="0.1" value="1.0" style="width: 100%; accent-color: #ffca28; cursor: pointer;">
@@ -133,40 +152,58 @@
                 </div>
             </div>
 
-            <!-- 靶高度自由調整 (垂直升降) -->
-            <div class="control-group" style="background: rgba(255, 152, 0, 0.06); padding: 8px 10px; border-radius: 8px; border: 1px solid rgba(255, 152, 0, 0.25);">
-                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
-                    <label class="control-label" style="margin: 0; color: #ff9800; font-weight: 600;">🗼 靶高度 (垂直升降)：</label>
-                    <span id="targetHeightValLabel" style="font-size: 12px; font-weight: bold; color: #ff9800;">標準 (82%)</span>
+            <!-- 多排靶台與氣球配置 -->
+            <div class="control-group" style="background: rgba(255, 152, 0, 0.07); padding: 9px 10px; border-radius: 8px; border: 1px solid rgba(255, 152, 0, 0.3);">
+                <div style="display: flex; gap: 8px; margin-bottom: 6px;">
+                    <div style="flex: 1;">
+                        <label class="control-label" style="margin-bottom: 3px; color: #ffb74d; font-weight: 600;">📚 靶子排數 (前後多排):</label>
+                        <select id="rowCountSelect" style="width: 100%;">
+                            <option value="1" selected>1 排 (單排)</option>
+                            <option value="2">2 排 (雙排)</option>
+                            <option value="3">3 排 (經典三排靶台)</option>
+                            <option value="4">4 排 (四排密集靶牆)</option>
+                            <option value="5">5 排 (五排大滿貫)</option>
+                        </select>
+                    </div>
+                    <div style="flex: 1;">
+                        <label class="control-label" style="margin-bottom: 3px; color: #ffb74d; font-weight: 600;">🎯 每排數量:</label>
+                        <select id="targetCountSelect" style="width: 100%;">
+                            <option value="1">每排 1 個 (巨靶)</option>
+                            <option value="2">每排 2 個</option>
+                            <option value="3">每排 3 個</option>
+                            <option value="5" selected>每排 5 個 (標準)</option>
+                            <option value="7">每排 7 個 (密集)</option>
+                            <option value="9">每排 9 個 (滿排)</option>
+                            <option value="12">每排 12 個 (超密)</option>
+                        </select>
+                    </div>
                 </div>
-                <input type="range" id="targetHeightSlider" min="20" max="98" step="1" value="82" style="width: 100%; accent-color: #ff9800; cursor: pointer;">
-            </div>
 
-            <!-- 十字架數量與模式 -->
-            <div class="control-group">
-                <div class="row-controls" style="margin-top: 0;">
-                    <label class="control-label" style="margin:0;">靶子數量:</label>
-                    <select id="targetCountSelect" style="flex: 1;">
-                        <option value="1">1 個十字架 (巨靶居中)</option>
-                        <option value="2">2 個十字架</option>
-                        <option value="3">3 個十字架</option>
-                        <option value="5" selected>5 個十字架 (標準)</option>
-                        <option value="7">7 個十字架 (擁擠)</option>
-                        <option value="9">9 個十字架 (滿排)</option>
-                    </select>
+                <!-- 同場加放氣球開關 -->
+                <div style="margin-bottom: 6px; padding-top: 4px; border-top: 1px dashed rgba(255,255,255,0.12);">
+                    <label class="checkbox-label" style="color: #ff80ab; font-weight: 600;">
+                        <input type="checkbox" id="extraBalloonsToggle"> 🎈 同場額外加放一整排氣球 (射到就破！)
+                    </label>
                 </div>
+
+                <!-- 靶高度自由調整 (垂直升降) -->
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 2px;">
+                    <label class="control-label" style="margin: 0; color: #ff9800; font-weight: 600;">🗼 基準靶台高度：</label>
+                    <span id="targetHeightValLabel" style="font-size: 11px; font-weight: bold; color: #ff9800;">標準 (82%)</span>
+                </div>
+                <input type="range" id="targetHeightSlider" min="35" max="96" step="1" value="82" style="width: 100%; accent-color: #ff9800; cursor: pointer;">
             </div>
 
             <!-- 自動移動靶動態控制 (3D 空間移動) -->
             <div class="control-group" style="background: rgba(156, 39, 176, 0.08); padding: 8px 10px; border-radius: 8px; border: 1px solid rgba(156, 39, 176, 0.3);">
                 <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
-                    <label class="control-label" style="margin: 0; color: #ba68c8; font-weight: 600;">🕹️ 自動移動靶 (3D空間)：</label>
+                    <label class="control-label" style="margin: 0; color: #ba68c8; font-weight: 600;">🕹️ 自動移動靶 (多排交錯移動)：</label>
                     <span id="moveSpeedValLabel" style="font-size: 11px; color: #ffcc00; font-weight: bold;">1.0x</span>
                 </div>
 
                 <div style="display: flex; flex-direction: column; gap: 4px; margin-bottom: 6px;">
                     <label class="checkbox-label">
-                        <input type="checkbox" id="moveHorizontalToggle"> ↔️ 水平左右移動 (X軸)
+                        <input type="checkbox" id="moveHorizontalToggle"> ↔️ 水平左右移動 (多排正反向交錯)
                     </label>
                     <label class="checkbox-label">
                         <input type="checkbox" id="moveVerticalToggle"> ↕️ 垂直上下移動 (Y軸)
@@ -191,7 +228,7 @@
             <!-- 底部操作按鈕列 -->
             <div class="control-group" style="margin-bottom:0; display: flex; flex-direction: column; gap: 6px;">
                 <button id="btnClean" class="btn btn-primary" style="width: 100%;">
-                    🧹 一鍵修復 / 清洗靶場 (R鍵)
+                    🧹 全數立正 / 重新充氣修復 (R鍵)
                 </button>
                 <button id="btnClosePanelPlay" class="btn mobile-only-btn" style="width: 100%; padding: 8px; font-size: 13px; font-weight: 700; background: linear-gradient(90deg, #00b4d8, #0077b6); border-color: #00e5ff; color: #fff;">
                     ✅ 完成設定・開始射擊
@@ -214,7 +251,11 @@
                 <span id="statHits" class="stat-val">0</span>
             </div>
             <div class="stat-row">
-                <span class="stat-label">爆頭次數 (HEADSHOT):</span>
+                <span class="stat-label">擊倒/破氣球:</span>
+                <span id="statKnockdowns" class="stat-val" style="color: #00e5ff;">0</span>
+            </div>
+            <div class="stat-row">
+                <span class="stat-label">紅心/爆頭 (CRIT):</span>
                 <span id="statHeadshots" class="stat-val headshot">0</span>
             </div>
             <div class="stat-row">
