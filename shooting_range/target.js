@@ -10,11 +10,12 @@ class CrucifiedDummy {
 
         // 自訂圖片
         this.customImage = customImage; // Image 物件
-        this.isCustomFull = isCustomFull; // 是否為整尊替換，否則僅替換頭像
-        this.customScale = 1.0; // 放大縮小倍率 (0.2 ~ 3.5)
+        this.isCustomFull = isCustomFull; // 是否為整張相片完整顯示，否則為替換頭像
+        this.customScale = 1.0; // 放大縮小倍率
         this.customOffsetX = 0; // 左右水平偏移
         this.customOffsetY = 0; // 上下垂直偏移
         this.customShape = 'circle'; // 'circle' | 'rect'
+        this.headFrameScale = 1.0; // 頭像框本身的大小倍率 (0.8 ~ 4.0)
 
         // 預設樣式
         this.dummyType = Math.floor(Math.random() * 3); // 0: 布偶, 1: 標靶假人, 2: 搞怪表情人
@@ -125,17 +126,26 @@ class CrucifiedDummy {
         const sin = Math.sin(-this.angle);
         const localX = dx * cos - dy * sin;
         const localY = dx * sin + dy * cos;
+        const s = this.scale;
 
-        // 1. 如果是全身自訂圖片檢測
+        // 1. 如果是整張相片完整顯示模式 (isCustomFull)
         if (this.customImage && this.isCustomFull) {
             const aspect = this.customImage.width / this.customImage.height;
-            const h = 260 * this.scale * this.customScale;
-            const w = h * aspect;
-            const topY = this.headY - 20 * this.scale + this.customOffsetY;
-            const leftX = -w / 2 + this.customOffsetX;
+            let baseH = 260 * s;
+            let baseW = baseH * aspect;
+            if (baseW > 300 * s) {
+                baseW = 300 * s;
+                baseH = baseW / aspect;
+            }
+            const w = baseW * this.customScale;
+            const h = baseH * this.customScale;
+            const centerX = this.customOffsetX * s;
+            const centerY = -165 * s + this.customOffsetY * s;
+            const leftX = centerX - w / 2;
+            const topY = centerY - h / 2;
             if (localY >= topY && localY <= topY + h && localX >= leftX && localX <= leftX + w) {
-                // 上方 25% 視為暴擊爆頭
-                const isHead = localY <= topY + h * 0.25;
+                // 上方 30% 視為暴擊爆頭
+                const isHead = localY <= topY + h * 0.30;
                 return { 
                     part: isHead ? 'head' : 'body', 
                     localX, localY, 
@@ -145,10 +155,18 @@ class CrucifiedDummy {
             }
         }
 
-        // 2. 頭部檢測 (靶頭固定在十字架頂端，不受照片偏移影響)
-        const headDist = Math.hypot(localX, localY - this.headY);
-        if (headDist <= this.headRadius) {
-            return { part: 'head', localX, localY, crit: true, multiplier: 2.5 };
+        // 2. 頭部檢測 (支援 headFrameScale 頭框放大倍率)
+        const effectiveHeadRadius = this.headRadius * (this.headFrameScale || 1.0);
+        if (this.customImage && !this.isCustomFull && this.customShape === 'rect') {
+            const halfFrame = effectiveHeadRadius * 1.1;
+            if (Math.abs(localX) <= halfFrame && Math.abs(localY - this.headY) <= halfFrame) {
+                return { part: 'head', localX, localY, crit: true, multiplier: 2.5 };
+            }
+        } else {
+            const headDist = Math.hypot(localX, localY - this.headY);
+            if (headDist <= effectiveHeadRadius * 1.05) {
+                return { part: 'head', localX, localY, crit: true, multiplier: 2.5 };
+            }
         }
 
         // 3. 軀幹檢測 (胸腹)
@@ -319,21 +337,38 @@ class CrucifiedDummy {
         ctx.stroke();
     }
 
-    drawDummy(ctx) {
-        // 如果是自訂整個人偶
+    drawDummy(ctx, isPreview = false) {
+        const s = this.scale;
+
+        // 如果是「整張相片完整顯示」模式 (isCustomFull)
         if (this.customImage && this.isCustomFull) {
             const aspect = this.customImage.width / this.customImage.height;
-            const h = 260 * this.scale * this.customScale;
-            const w = h * aspect;
-            const drawX = -w / 2 + this.customOffsetX;
-            const drawY = this.headY - 20 * this.scale + this.customOffsetY;
+            let baseH = 260 * s;
+            let baseW = baseH * aspect;
+            if (baseW > 300 * s) {
+                baseW = 300 * s;
+                baseH = baseW / aspect;
+            }
+            const w = baseW * this.customScale;
+            const h = baseH * this.customScale;
+            const centerX = this.customOffsetX * s;
+            const centerY = -165 * s + this.customOffsetY * s;
+            const drawX = centerX - w / 2;
+            const drawY = centerY - h / 2;
+
+            ctx.save();
+            ctx.shadowColor = 'rgba(0, 0, 0, 0.55)';
+            ctx.shadowBlur = 10 * s;
             ctx.drawImage(this.customImage, drawX, drawY, w, h);
-            // 綁繩
+            ctx.strokeStyle = isPreview ? '#00e5ff' : 'rgba(255, 255, 255, 0.35)';
+            ctx.lineWidth = (isPreview ? 2.5 : 2) * s;
+            ctx.strokeRect(drawX, drawY, w, h);
+            ctx.restore();
+
+            // 綁繩在整張相片上方固定處
             this.drawRopes(ctx);
             return;
         }
-
-        const s = this.scale;
 
         // 身體軀幹 (麻布偶/棉布假人)
         ctx.fillStyle = '#cfbfa8'; // 麻布色
@@ -380,40 +415,59 @@ class CrucifiedDummy {
         ctx.lineTo(20 * s, this.headY + 120 * s);
         ctx.stroke();
 
-        // 繪製頭部 (自訂頭像 或 預設表情)
-        this.drawHead(ctx);
-
         // 綁在手腕與腳踝上的粗麻繩
         this.drawRopes(ctx);
+
+        // 繪製頭部 (自訂頭像 或 預設表情，放在最上層避免大頭框被繩子遮擋)
+        this.drawHead(ctx, isPreview);
     }
 
-    drawHead(ctx) {
+    drawHead(ctx, isPreview = false) {
         const s = this.scale;
         const hx = 0;
         const hy = this.headY;
-        const hr = this.headRadius;
+        const frameScale = this.headFrameScale || 1.0;
+        const hr = this.headRadius * frameScale;
 
         if (this.customImage && !this.isCustomFull) {
+            const aspect = this.customImage.width / this.customImage.height;
+            let baseSize = hr * 2.2;
+            let drawW = baseSize * this.customScale;
+            let drawH = baseSize * this.customScale;
+            if (aspect > 1) {
+                drawW = drawH * aspect;
+            } else {
+                drawH = drawW / aspect;
+            }
+            const photoX = hx + this.customOffsetX * s;
+            const photoY = hy + this.customOffsetY * s;
+
+            // 若在即時預覽視窗中，先繪製半透明的「裁切框外完整原圖殘影」，讓使用者拖曳對位超直覺！
+            if (isPreview) {
+                ctx.save();
+                ctx.globalAlpha = 0.28;
+                ctx.drawImage(this.customImage, photoX - drawW / 2, photoY - drawH / 2, drawW, drawH);
+                ctx.strokeStyle = 'rgba(0, 229, 255, 0.5)';
+                ctx.lineWidth = 1.5 * s;
+                ctx.setLineDash([4 * s, 4 * s]);
+                ctx.strokeRect(photoX - drawW / 2, photoY - drawH / 2, drawW, drawH);
+                ctx.restore();
+            }
+
             ctx.save();
             if (this.customShape === 'rect') {
-                // 矩形頭像框 (固定在十字架頂端)
+                // 方形頭像框 (固定在十字架頂端)
                 const frameW = hr * 2.2;
                 const frameH = hr * 2.2;
                 ctx.beginPath();
                 ctx.rect(hx - frameW / 2, hy - frameH / 2, frameW, frameH);
                 ctx.clip();
 
-                // 照片在框內縮放與平移
-                const aspect = this.customImage.width / this.customImage.height;
-                let drawH = frameH * this.customScale;
-                let drawW = drawH * aspect;
-                const photoX = hx + this.customOffsetX;
-                const photoY = hy + this.customOffsetY;
                 ctx.drawImage(this.customImage, photoX - drawW / 2, photoY - drawH / 2, drawW, drawH);
-
                 ctx.restore();
-                ctx.strokeStyle = '#333';
-                ctx.lineWidth = 2.5 * s;
+
+                ctx.strokeStyle = isPreview ? '#00e5ff' : '#333';
+                ctx.lineWidth = (isPreview ? 3.5 : 2.5) * s;
                 ctx.strokeRect(hx - frameW / 2, hy - frameH / 2, frameW, frameH);
             } else {
                 // 圓形頭像框 (固定在十字架頂端)
@@ -421,26 +475,29 @@ class CrucifiedDummy {
                 ctx.arc(hx, hy, hr * 1.05, 0, Math.PI * 2);
                 ctx.clip();
 
-                // 照片在圓形框內縮放與平移 (Pan & Zoom inside frame)
-                const aspect = this.customImage.width / this.customImage.height;
-                let baseSize = hr * 2.2;
-                let drawW = baseSize * this.customScale;
-                let drawH = baseSize * this.customScale;
-                if (aspect > 1) {
-                    drawW = drawH * aspect;
-                } else {
-                    drawH = drawW / aspect;
-                }
-                const photoX = hx + this.customOffsetX;
-                const photoY = hy + this.customOffsetY;
                 ctx.drawImage(this.customImage, photoX - drawW / 2, photoY - drawH / 2, drawW, drawH);
-
                 ctx.restore();
-                ctx.strokeStyle = '#333';
-                ctx.lineWidth = 3 * s;
+
+                ctx.strokeStyle = isPreview ? '#00e5ff' : '#333';
+                ctx.lineWidth = (isPreview ? 3.5 : 3) * s;
                 ctx.beginPath();
                 ctx.arc(hx, hy, hr * 1.05, 0, Math.PI * 2);
                 ctx.stroke();
+            }
+
+            // 預覽模式下繪製淡淡的十字對準中心線
+            if (isPreview) {
+                ctx.save();
+                ctx.strokeStyle = 'rgba(0, 229, 255, 0.55)';
+                ctx.lineWidth = 1.2 * s;
+                ctx.setLineDash([3 * s, 3 * s]);
+                ctx.beginPath();
+                ctx.moveTo(hx - hr * 1.15, hy);
+                ctx.lineTo(hx + hr * 1.15, hy);
+                ctx.moveTo(hx, hy - hr * 1.15);
+                ctx.lineTo(hx, hy + hr * 1.15);
+                ctx.stroke();
+                ctx.restore();
             }
             return;
         }

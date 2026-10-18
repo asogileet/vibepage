@@ -19,91 +19,117 @@
 
         <!-- 左上角：自訂人偶與靶場設定 -->
         <div id="controlPanel" class="panel">
-            <div class="panel-title">
-                <span>🎯</span>
-                <span>十字架靶場控制台</span>
+            <div class="panel-title" style="justify-content: space-between;">
+                <div style="display: flex; align-items: center; gap: 8px;">
+                    <span>🎯</span>
+                    <span>十字架靶場控制台</span>
+                </div>
+                <button id="btnHeaderClosePanel" class="btn mobile-only-btn" style="padding: 2px 8px; font-size: 11px; background: rgba(0, 229, 255, 0.2); border-color: #00e5ff; color: #00e5ff;">✕ 收合</button>
             </div>
 
             <!-- 上傳人偶功能 -->
-            <div class="control-group">
-                <label class="control-label">自訂人偶 (點擊或直接拖曳圖片進來)：</label>
-                <label class="upload-box">
-                    <span class="upload-icon">📷</span>
-                    <span class="upload-text">點擊上傳自訂頭像 / 人偶</span>
+            <div class="control-group" style="margin-bottom: 10px;">
+                <label class="upload-box" style="padding: 10px;">
+                    <div style="display: flex; align-items: center; gap: 8px;">
+                        <span class="upload-icon" style="font-size: 20px;">📷</span>
+                        <span class="upload-text">點擊上傳相片 (頭像或整張相片)</span>
+                    </div>
                     <input type="file" id="imageUploadInput" accept="image/*">
                 </label>
-                <div class="preview-container">
-                    <img id="uploadPreview" alt="預覽圖">
-                    <span id="uploadStatus">預設呆萌/標靶人偶</span>
+                <div class="preview-container" style="margin-top: 6px; justify-content: space-between;">
+                    <div style="display: flex; align-items: center; gap: 8px; overflow: hidden;">
+                        <img id="uploadPreview" alt="預覽圖">
+                        <span id="uploadStatus">預設呆萌/標靶人偶</span>
+                    </div>
                 </div>
             </div>
 
-            <!-- 圖片縮放與位置調整 -->
-            <div id="imageAdjustControls" class="control-group" style="background: rgba(0, 229, 255, 0.05); padding: 10px; border-radius: 8px; border: 1px solid rgba(0, 229, 255, 0.2);">
-                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
-                    <label class="control-label" style="margin: 0; color: #00e5ff; font-weight: 600;">🔍 照片在靶內縮放 (Zoom)：</label>
+            <!-- 圖片顯示模式、即時互動預覽與位置調整 -->
+            <div id="imageAdjustControls" class="control-group" style="background: rgba(0, 229, 255, 0.06); padding: 10px; border-radius: 10px; border: 1px solid rgba(0, 229, 255, 0.25);">
+                
+                <!-- 1. 三種顯示模式一鍵切換 (圓形頭像 / 方形頭像 / 整張相片) -->
+                <label class="control-label" style="color: #00e5ff; font-weight: 700; margin-bottom: 5px;">🖼️ 相片顯示模式 (點擊切換)：</label>
+                <div class="mode-switch-group" style="display: flex; gap: 5px; margin-bottom: 8px;">
+                    <button type="button" class="btn mode-btn active" data-mode="circle" style="flex: 1; padding: 6px 4px; font-size: 11px; font-weight: 600;">
+                        ⭕ 圓形頭像
+                    </button>
+                    <button type="button" class="btn mode-btn" data-mode="rect" style="flex: 1; padding: 6px 4px; font-size: 11px; font-weight: 600;">
+                        ⬜ 方形頭像
+                    </button>
+                    <button type="button" class="btn mode-btn" data-mode="full" style="flex: 1.15; padding: 6px 4px; font-size: 11px; font-weight: 600;">
+                        🖼️ 整張相片
+                    </button>
+                </div>
+
+                <!-- 2. 即時同步互動預覽窗 (支援直接用手指拖曳對準臉部、雙指縮放) -->
+                <div id="livePreviewContainer" style="position: relative; width: 100%; height: 175px; background: radial-gradient(circle at center, #1f2937 0%, #0d1117 100%); border: 1.5px solid rgba(0, 229, 255, 0.45); border-radius: 8px; overflow: hidden; margin-bottom: 8px; touch-action: none;">
+                    <canvas id="livePreviewCanvas" width="300" height="175" style="width: 100%; height: 100%; display: block; cursor: grab; touch-action: none;"></canvas>
+                    
+                    <!-- 預覽窗頂部狀態提示 -->
+                    <div style="position: absolute; top: 5px; left: 7px; right: 7px; display: flex; justify-content: space-between; align-items: center; pointer-events: none;">
+                        <span id="previewHintBadge" style="background: rgba(0, 0, 0, 0.7); color: #00e5ff; font-size: 10px; padding: 2px 6px; border-radius: 4px; border: 1px solid rgba(0, 229, 255, 0.3);">
+                            👆 直接在預覽圖上滑動移位・雙指縮放
+                        </span>
+                        <button type="button" id="btnPreviewZoomToggle" class="btn" style="pointer-events: auto; padding: 1px 6px; font-size: 10px; background: rgba(0,0,0,0.75); border-color: rgba(255,255,255,0.3);" title="切換預覽視角 (特寫/全貌)">
+                            🔍 特寫視角
+                        </button>
+                    </div>
+
+                    <!-- 預覽窗底部快捷鍵 -->
+                    <div style="position: absolute; bottom: 5px; right: 6px; display: flex; gap: 4px;">
+                        <button type="button" id="btnPosCenter" class="btn btn-primary" style="padding: 2px 7px; font-size: 10px; background: rgba(0, 180, 216, 0.85); border-color: #00e5ff;" title="相片置中歸零">
+                            🎯 置中對齊
+                        </button>
+                    </div>
+                </div>
+
+                <!-- 3. 照片縮放 (Zoom) -->
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
+                    <label id="zoomLabelText" class="control-label" style="margin: 0; color: #00e5ff; font-weight: 600;">🔍 相片縮放比例 (Zoom)：</label>
                     <span id="scaleValLabel" style="font-size: 12px; font-weight: bold; color: #ffcc00;">100%</span>
                 </div>
                 <div style="display: flex; align-items: center; gap: 6px;">
                     <button id="btnScaleMinus" class="btn" style="padding: 2px 8px; font-size: 13px;">-</button>
-                    <input type="range" id="imageScaleSlider" min="0.1" max="10.0" step="0.1" value="1.0" style="flex: 1; accent-color: #00e5ff; cursor: pointer;">
+                    <input type="range" id="imageScaleSlider" min="0.1" max="10.0" step="0.05" value="1.0" style="flex: 1; accent-color: #00e5ff; cursor: pointer;">
                     <button id="btnScalePlus" class="btn" style="padding: 2px 8px; font-size: 13px;">+</button>
-                    <button id="btnScaleReset" class="btn" style="padding: 2px 6px; font-size: 11px;">重設</button>
+                    <button id="btnScaleReset" class="btn" style="padding: 2px 6px; font-size: 11px;">100%</button>
                 </div>
 
                 <!-- 快速比例預設與一鍵全屏按鈕 -->
                 <div style="display: flex; gap: 4px; margin-top: 6px;">
-                    <button class="btn btn-scale-preset" data-scale="1.0" style="flex: 1; padding: 2px 4px; font-size: 10px;">100%</button>
-                    <button class="btn btn-scale-preset" data-scale="3.0" style="flex: 1; padding: 2px 4px; font-size: 10px;">300%</button>
-                    <button class="btn btn-scale-preset" data-scale="5.0" style="flex: 1; padding: 2px 4px; font-size: 10px;">500%</button>
-                    <button id="btnFullScreenFit" class="btn btn-primary" style="flex: 1.5; padding: 2px 4px; font-size: 11px; background: linear-gradient(90deg, #ff5722, #e91e63);">🖥️ 全屏滿版</button>
+                    <button class="btn btn-scale-preset" data-scale="1.0" style="flex: 1; padding: 3px 4px; font-size: 10px;">100%</button>
+                    <button class="btn btn-scale-preset" data-scale="2.0" style="flex: 1; padding: 3px 4px; font-size: 10px;">200%</button>
+                    <button class="btn btn-scale-preset" data-scale="4.0" style="flex: 1; padding: 3px 4px; font-size: 10px;">400%</button>
+                    <button id="btnFullScreenFit" class="btn btn-primary" style="flex: 1.6; padding: 3px 4px; font-size: 11px; background: linear-gradient(90deg, #ff5722, #e91e63); border: none;">🖥️ 整張全屏巨靶</button>
                 </div>
 
-                <!-- 水平與垂直位置滑桿 -->
-                <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 8px; margin-bottom: 2px;">
-                    <label class="control-label" style="margin: 0;">↔️ 照片在靶內水平位移 (Pan X)：</label>
-                    <span id="offsetXValLabel" style="font-size: 11px; color: #00e5ff; font-weight: bold;">0px</span>
-                </div>
-                <input type="range" id="imageOffsetXSlider" min="-500" max="500" step="5" value="0" style="width: 100%; accent-color: #00e5ff; cursor: pointer;">
-
-                <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 6px; margin-bottom: 2px;">
-                    <label class="control-label" style="margin: 0;">↕️ 照片在靶內垂直位移 (Pan Y)：</label>
-                    <span id="offsetYValLabel" style="font-size: 11px; color: #00e5ff; font-weight: bold;">0px</span>
-                </div>
-                <input type="range" id="imageOffsetYSlider" min="-500" max="500" step="5" value="0" style="width: 100%; accent-color: #00e5ff; cursor: pointer;">
-
-                <!-- 方向微調與居中重設 -->
-                <div style="display: flex; justify-content: center; align-items: center; gap: 4px; margin-top: 8px;">
-                    <button id="btnPosLeft" class="btn" style="padding: 2px 8px; font-size: 11px;" title="向左微調照片">⬅️</button>
-                    <button id="btnPosUp" class="btn" style="padding: 2px 8px; font-size: 11px;" title="向上微調照片">⬆️</button>
-                    <button id="btnPosCenter" class="btn btn-primary" style="padding: 2px 8px; font-size: 10px;" title="照片在靶內居中">🎯 照片居中</button>
-                    <button id="btnPosDown" class="btn" style="padding: 2px 8px; font-size: 11px;" title="向下微調照片">⬇️</button>
-                    <button id="btnPosRight" class="btn" style="padding: 2px 8px; font-size: 11px;" title="向右微調照片">➡️</button>
+                <!-- 4. 頭框本身大小調整 (僅在圓形/方形頭像模式顯示) -->
+                <div id="headFrameSizeRow" style="margin-top: 8px; padding-top: 6px; border-top: 1px dashed rgba(255,255,255,0.12);">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 2px;">
+                        <label class="control-label" style="margin: 0; color: #ffca28; font-weight: 600;">👤 頭像框尺寸 (大頭模式)：</label>
+                        <span id="headFrameScaleLabel" style="font-size: 11px; color: #ffca28; font-weight: bold;">100% (標準)</span>
+                    </div>
+                    <input type="range" id="headFrameScaleSlider" min="0.8" max="4.0" step="0.1" value="1.0" style="width: 100%; accent-color: #ffca28; cursor: pointer;">
                 </div>
 
-                <div style="font-size: 10px; color: rgba(255,255,255,0.5); margin-top: 6px; text-align: center;">
-                    💡 提示：按住【滑鼠右鍵】可在靶框內直接拖曳調整照片顯示位置 (十字架靶身固定不動)！
-                </div>
+                <!-- 5. 水平與垂直微調滑桿與方向鍵 -->
+                <div style="margin-top: 6px; padding-top: 6px; border-top: 1px dashed rgba(255,255,255,0.12);">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 2px;">
+                        <label class="control-label" style="margin: 0;">↔️ 水平微調 (X)：<b id="offsetXValLabel" style="color: #00e5ff;">0px</b></label>
+                        <label class="control-label" style="margin: 0;">↕️ 垂直微調 (Y)：<b id="offsetYValLabel" style="color: #00e5ff;">0px</b></label>
+                    </div>
+                    <div style="display: flex; gap: 6px; align-items: center;">
+                        <input type="range" id="imageOffsetXSlider" min="-500" max="500" step="2" value="0" style="flex: 1; accent-color: #00e5ff; cursor: pointer;" title="水平位置滑桿">
+                        <input type="range" id="imageOffsetYSlider" min="-500" max="500" step="2" value="0" style="flex: 1; accent-color: #00e5ff; cursor: pointer;" title="垂直位置滑桿">
+                    </div>
 
-                <button id="btnTouchDragMode" class="btn" style="width: 100%; margin-top: 6px; padding: 5px; font-size: 11px; font-weight: 600;">
-                    🖐️ 觸控滑動調整照片 (手機推薦)
-                </button>
-
-                <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 8px;">
-                    <label class="control-label" style="margin: 0;">裁切樣式：</label>
-                    <select id="imageShapeSelect" style="padding: 3px 8px;">
-                        <option value="circle">圓形裁切 (Circle)</option>
-                        <option value="rect">原圖矩形 (Square/Rect)</option>
-                    </select>
-                </div>
-            </div>
-
-            <!-- 人偶配置切換 -->
-            <div class="control-group">
-                <div class="row-controls">
-                    <label class="checkbox-label">
-                        <input type="checkbox" id="fullBodyToggle"> 全身替換 (否則為替換頭像)
-                    </label>
+                    <!-- 方向微調按鈕 -->
+                    <div style="display: flex; justify-content: center; align-items: center; gap: 5px; margin-top: 6px;">
+                        <button id="btnPosLeft" class="btn" style="flex: 1; padding: 4px 0; font-size: 12px;" title="向左移">⬅️</button>
+                        <button id="btnPosUp" class="btn" style="flex: 1; padding: 4px 0; font-size: 12px;" title="向上移">⬆️</button>
+                        <button id="btnPosDown" class="btn" style="flex: 1; padding: 4px 0; font-size: 12px;" title="向下移">⬇️</button>
+                        <button id="btnPosRight" class="btn" style="flex: 1; padding: 4px 0; font-size: 12px;" title="向右移">➡️</button>
+                    </div>
                 </div>
             </div>
 
@@ -118,9 +144,9 @@
 
             <!-- 十字架數量與模式 -->
             <div class="control-group">
-                <div class="row-controls">
+                <div class="row-controls" style="margin-top: 0;">
                     <label class="control-label" style="margin:0;">靶子數量:</label>
-                    <select id="targetCountSelect">
+                    <select id="targetCountSelect" style="flex: 1;">
                         <option value="1">1 個十字架 (巨靶居中)</option>
                         <option value="2">2 個十字架</option>
                         <option value="3">3 個十字架</option>
@@ -162,10 +188,13 @@
                 </div>
             </div>
 
-            <!-- 翻新修復 -->
-            <div class="control-group" style="margin-bottom:0;">
+            <!-- 底部操作按鈕列 -->
+            <div class="control-group" style="margin-bottom:0; display: flex; flex-direction: column; gap: 6px;">
                 <button id="btnClean" class="btn btn-primary" style="width: 100%;">
                     🧹 一鍵修復 / 清洗靶場 (R鍵)
+                </button>
+                <button id="btnClosePanelPlay" class="btn mobile-only-btn" style="width: 100%; padding: 8px; font-size: 13px; font-weight: 700; background: linear-gradient(90deg, #00b4d8, #0077b6); border-color: #00e5ff; color: #fff;">
+                    ✅ 完成設定・開始射擊
                 </button>
             </div>
         </div>

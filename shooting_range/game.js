@@ -47,24 +47,35 @@ class ShootingRange {
         this.targetHeightRatio = 0.82;
         this.targetCount = 5;
 
-        // 自訂圖片
+        // 自訂圖片與顯示模式 ('circle' | 'rect' | 'full')
         this.uploadedImage = null;
+        this.displayMode = 'circle';
         this.isCustomFull = false;
         this.customScale = 1.0;
         this.customOffsetX = 0;
         this.customOffsetY = 0;
         this.customShape = 'circle';
+        this.headFrameScale = 1.0;
 
-        // 圖片拖曳狀態
+        // 即時同步預覽窗設定
+        this.previewCanvas = document.getElementById('livePreviewCanvas');
+        this.previewCtx = this.previewCanvas ? this.previewCanvas.getContext('2d') : null;
+        this.previewCloseUp = true; // 預設特寫視角 (頭像模式時放大看臉，整張模式時看全貌)
+        this.currentPreviewCamScale = 1.25;
+        this.previewDummy = new CrucifiedDummy(0, 0, 1.0, null, false);
+
+        // 圖片拖曳與雙指縮放狀態
         this.isDraggingImage = false;
         this.dragStartX = 0;
         this.dragStartY = 0;
         this.dragInitialOffsetX = 0;
         this.dragInitialOffsetY = 0;
+        this.dragSensitivity = 1.0;
 
         this.initCanvasSize();
         this.setupDefaultTargets();
         this.setupEventListeners();
+        this.setupPreviewInteractions();
 
         this.lastFrameTime = performance.now();
         requestAnimationFrame((t) => this.loop(t));
@@ -97,6 +108,7 @@ class ShootingRange {
             dummy.customOffsetX = this.customOffsetX;
             dummy.customOffsetY = this.customOffsetY;
             dummy.customShape = this.customShape;
+            dummy.headFrameScale = this.headFrameScale;
             this.dummies.push(dummy);
         }
     }
@@ -554,7 +566,177 @@ class ShootingRange {
         });
     }
 
-    // 處理圖片上傳 (自訂頭像或全身)
+    // 綁定即時預覽窗的單指拖曳移位、雙指縮放與滾輪縮放
+    setupPreviewInteractions() {
+        if (!this.previewCanvas) return;
+
+        this.isPreviewDragging = false;
+        this.isPreviewPinching = false;
+        this.previewDragStartX = 0;
+        this.previewDragStartY = 0;
+        this.previewDragInitOffsetX = 0;
+        this.previewDragInitOffsetY = 0;
+        this.pinchStartDist = 0;
+        this.pinchInitScale = 1.0;
+
+        // 滑鼠拖曳預覽窗
+        this.previewCanvas.addEventListener('mousedown', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            this.isPreviewDragging = true;
+            this.previewDragStartX = e.clientX;
+            this.previewDragStartY = e.clientY;
+            this.previewDragInitOffsetX = this.customOffsetX;
+            this.previewDragInitOffsetY = this.customOffsetY;
+        });
+
+        window.addEventListener('mousemove', (e) => {
+            if (!this.isPreviewDragging || !this.previewCanvas) return;
+            const rect = this.previewCanvas.getBoundingClientRect();
+            const factorX = (this.previewCanvas.width / Math.max(1, rect.width)) / this.currentPreviewCamScale;
+            const factorY = (this.previewCanvas.height / Math.max(1, rect.height)) / this.currentPreviewCamScale;
+            const dx = (e.clientX - this.previewDragStartX) * factorX;
+            const dy = (e.clientY - this.previewDragStartY) * factorY;
+            this.setCustomOffsetX(Math.max(-500, Math.min(500, Math.round(this.previewDragInitOffsetX + dx))));
+            this.setCustomOffsetY(Math.max(-500, Math.min(500, Math.round(this.previewDragInitOffsetY + dy))));
+        });
+
+        window.addEventListener('mouseup', () => {
+            this.isPreviewDragging = false;
+        });
+
+        // 滾輪在預覽窗內直接縮放相片
+        this.previewCanvas.addEventListener('wheel', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            const step = this.customScale >= 3.0 ? 0.25 : 0.1;
+            const delta = e.deltaY < 0 ? step : -step;
+            const newScale = Math.max(0.1, Math.min(10.0, Math.round((this.customScale + delta) * 20) / 20));
+            this.setCustomScale(newScale);
+        }, { passive: false });
+
+        // 手機/平板：在預覽窗內單指滑動移位、雙指捏合縮放
+        this.previewCanvas.addEventListener('touchstart', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            if (e.touches.length >= 2) {
+                this.isPreviewDragging = false;
+                this.isPreviewPinching = true;
+                this.pinchStartDist = Math.hypot(
+                    e.touches[0].clientX - e.touches[1].clientX,
+                    e.touches[0].clientY - e.touches[1].clientY
+                );
+                this.pinchInitScale = this.customScale;
+            } else if (e.touches.length === 1) {
+                this.isPreviewPinching = false;
+                this.isPreviewDragging = true;
+                this.previewDragStartX = e.touches[0].clientX;
+                this.previewDragStartY = e.touches[0].clientY;
+                this.previewDragInitOffsetX = this.customOffsetX;
+                this.previewDragInitOffsetY = this.customOffsetY;
+            }
+        }, { passive: false });
+
+        this.previewCanvas.addEventListener('touchmove', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            if (this.isPreviewPinching && e.touches.length >= 2) {
+                const dist = Math.hypot(
+                    e.touches[0].clientX - e.touches[1].clientX,
+                    e.touches[0].clientY - e.touches[1].clientY
+                );
+                if (this.pinchStartDist > 5) {
+                    const ratio = dist / this.pinchStartDist;
+                    const newScale = Math.max(0.1, Math.min(10.0, Math.round((this.pinchInitScale * ratio) * 20) / 20));
+                    this.setCustomScale(newScale);
+                }
+            } else if (this.isPreviewDragging && e.touches.length === 1) {
+                const rect = this.previewCanvas.getBoundingClientRect();
+                const factorX = (this.previewCanvas.width / Math.max(1, rect.width)) / this.currentPreviewCamScale;
+                const factorY = (this.previewCanvas.height / Math.max(1, rect.height)) / this.currentPreviewCamScale;
+                const dx = (e.touches[0].clientX - this.previewDragStartX) * factorX;
+                const dy = (e.touches[0].clientY - this.previewDragStartY) * factorY;
+                this.setCustomOffsetX(Math.max(-500, Math.min(500, Math.round(this.previewDragInitOffsetX + dx))));
+                this.setCustomOffsetY(Math.max(-500, Math.min(500, Math.round(this.previewDragInitOffsetY + dy))));
+            }
+        }, { passive: false });
+
+        const endPreviewTouch = (e) => {
+            if (e.touches.length === 0) {
+                this.isPreviewDragging = false;
+                this.isPreviewPinching = false;
+            } else if (e.touches.length === 1) {
+                this.isPreviewPinching = false;
+                this.isPreviewDragging = true;
+                this.previewDragStartX = e.touches[0].clientX;
+                this.previewDragStartY = e.touches[0].clientY;
+                this.previewDragInitOffsetX = this.customOffsetX;
+                this.previewDragInitOffsetY = this.customOffsetY;
+            }
+        };
+        this.previewCanvas.addEventListener('touchend', endPreviewTouch);
+        this.previewCanvas.addEventListener('touchcancel', endPreviewTouch);
+    }
+
+    // 繪製控制面板內的即時同步預覽畫布
+    renderLivePreview() {
+        if (!this.previewCtx || !this.previewCanvas) return;
+        const panel = document.getElementById('controlPanel');
+        if (panel && panel.classList.contains('collapsed')) return;
+
+        const ctx = this.previewCtx;
+        const w = this.previewCanvas.width;
+        const h = this.previewCanvas.height;
+
+        ctx.clearRect(0, 0, w, h);
+
+        // 背景細網格線
+        ctx.save();
+        ctx.strokeStyle = 'rgba(255, 255, 255, 0.05)';
+        ctx.lineWidth = 1;
+        for (let gx = 0; gx < w; gx += 25) {
+            ctx.beginPath(); ctx.moveTo(gx, 0); ctx.lineTo(gx, h); ctx.stroke();
+        }
+        for (let gy = 0; gy < h; gy += 25) {
+            ctx.beginPath(); ctx.moveTo(0, gy); ctx.lineTo(w, gy); ctx.stroke();
+        }
+        ctx.restore();
+
+        // 同步預覽人偶的屬性
+        const pd = this.previewDummy;
+        pd.customImage = this.uploadedImage;
+        pd.isCustomFull = this.isCustomFull;
+        pd.customScale = this.customScale;
+        pd.customOffsetX = this.customOffsetX;
+        pd.customOffsetY = this.customOffsetY;
+        pd.customShape = this.customShape;
+        pd.headFrameScale = this.headFrameScale;
+        pd.dummyType = this.dummies[0] ? this.dummies[0].dummyType : 0;
+
+        ctx.save();
+        // 決定預覽相機的縮放與對焦中心
+        if (!this.isCustomFull && this.previewCloseUp) {
+            // 頭像特寫模式：對焦在十字架頂部頭像 (0, -250)
+            const camScale = Math.min(1.35, 1.55 / Math.max(1.0, this.headFrameScale * 0.75));
+            this.currentPreviewCamScale = camScale;
+            ctx.translate(w / 2, h * 0.56);
+            ctx.scale(camScale, camScale);
+            ctx.translate(0, 250);
+        } else {
+            // 全貌模式 (整張相片模式 或 切換為全貌視角)：對焦在十字架中心 (0, -170)
+            const camScale = 0.46;
+            this.currentPreviewCamScale = camScale;
+            ctx.translate(w / 2, h * 0.53);
+            ctx.scale(camScale, camScale);
+            ctx.translate(0, 170);
+        }
+
+        pd.drawCross(ctx);
+        pd.drawDummy(ctx, true);
+        ctx.restore();
+    }
+
+    // 處理圖片上傳 (自訂頭像或整張相片)
     handleImageFile(file) {
         if (!file.type.startsWith('image/')) {
             alert('請上傳有效的圖片文件 (PNG, JPG, WebP)！');
@@ -566,26 +748,79 @@ class ShootingRange {
             const img = new Image();
             img.onload = () => {
                 this.uploadedImage = img;
-                // 更新所有人偶的頭像
+                // 重設位置偏移，讓新上傳的相片預設居中
+                this.setCustomOffsetX(0);
+                this.setCustomOffsetY(0);
+                this.setCustomScale(1.0);
+
+                // 更新所有人偶的相片
                 this.dummies.forEach(d => {
                     d.customImage = img;
                     d.isCustomFull = this.isCustomFull;
+                    d.customShape = this.customShape;
+                    d.headFrameScale = this.headFrameScale;
                 });
-                // 更新預覽
+
+                // 更新小縮圖與文字狀態
                 const preview = document.getElementById('uploadPreview');
                 if (preview) {
                     preview.src = e.target.result;
                     preview.style.display = 'block';
                 }
                 const status = document.getElementById('uploadStatus');
-                if (status) status.innerText = `已載入人偶: ${file.name}`;
-                // 顯示尺寸調整控制器
-                const adjustControls = document.getElementById('imageAdjustControls');
-                if (adjustControls) adjustControls.style.display = 'block';
+                if (status) status.innerText = `已載入: ${file.name}`;
             };
             img.src = e.target.result;
         };
         reader.readAsDataURL(file);
+    }
+
+    // 切換三種顯示模式: 'circle' (圓形頭像) | 'rect' (方形頭像) | 'full' (整張相片完整顯示)
+    setDisplayMode(mode) {
+        this.displayMode = mode;
+        if (mode === 'full') {
+            this.isCustomFull = true;
+        } else {
+            this.isCustomFull = false;
+            this.customShape = mode === 'rect' ? 'rect' : 'circle';
+        }
+
+        this.dummies.forEach(d => {
+            d.isCustomFull = this.isCustomFull;
+            d.customShape = this.customShape;
+        });
+
+        // 更新按鈕高亮狀態
+        document.querySelectorAll('.mode-btn').forEach(btn => {
+            btn.classList.toggle('active', btn.dataset.mode === mode);
+        });
+
+        // 切換「頭像框尺寸」滑桿顯示與標籤文字
+        const headFrameRow = document.getElementById('headFrameSizeRow');
+        if (headFrameRow) {
+            headFrameRow.style.display = mode === 'full' ? 'none' : 'block';
+        }
+        const zoomLabel = document.getElementById('zoomLabelText');
+        if (zoomLabel) {
+            zoomLabel.innerText = mode === 'full' ? '🔍 整張相片大小 (Zoom)：' : '🔍 框內相片縮放 (Zoom)：';
+        }
+        const btnZoomToggle = document.getElementById('btnPreviewZoomToggle');
+        if (btnZoomToggle) {
+            btnZoomToggle.innerText = (mode === 'full' || !this.previewCloseUp) ? '🔍 全貌視角' : '🔍 特寫視角';
+        }
+    }
+
+    setHeadFrameScale(scale) {
+        this.headFrameScale = scale;
+        this.dummies.forEach(d => d.headFrameScale = scale);
+        const label = document.getElementById('headFrameScaleLabel');
+        if (label) {
+            label.innerText = `${Math.round(scale * 100)}%${scale === 1.0 ? ' (標準)' : ''}`;
+        }
+        const slider = document.getElementById('headFrameScaleSlider');
+        if (slider && parseFloat(slider.value) !== scale) {
+            slider.value = scale;
+        }
     }
 
     setCustomScale(scale) {
@@ -593,6 +828,10 @@ class ShootingRange {
         this.dummies.forEach(d => d.customScale = scale);
         const valLabel = document.getElementById('scaleValLabel');
         if (valLabel) valLabel.innerText = `${Math.round(scale * 100)}%`;
+        const scaleSlider = document.getElementById('imageScaleSlider');
+        if (scaleSlider && parseFloat(scaleSlider.value) !== scale) {
+            scaleSlider.value = scale;
+        }
     }
 
     setCustomOffsetX(offset) {
@@ -600,6 +839,10 @@ class ShootingRange {
         this.dummies.forEach(d => d.customOffsetX = offset);
         const valLabel = document.getElementById('offsetXValLabel');
         if (valLabel) valLabel.innerText = `${offset > 0 ? '+' : ''}${offset}px`;
+        const sliderX = document.getElementById('imageOffsetXSlider');
+        if (sliderX && parseInt(sliderX.value) !== offset) {
+            sliderX.value = offset;
+        }
     }
 
     setCustomOffsetY(offset) {
@@ -607,11 +850,14 @@ class ShootingRange {
         this.dummies.forEach(d => d.customOffsetY = offset);
         const valLabel = document.getElementById('offsetYValLabel');
         if (valLabel) valLabel.innerText = `${offset > 0 ? '+' : ''}${offset}px`;
+        const sliderY = document.getElementById('imageOffsetYSlider');
+        if (sliderY && parseInt(sliderY.value) !== offset) {
+            sliderY.value = offset;
+        }
     }
 
     setCustomShape(shape) {
-        this.customShape = shape;
-        this.dummies.forEach(d => d.customShape = shape);
+        this.setDisplayMode(shape === 'rect' ? 'rect' : 'circle');
     }
 
     setTargetHeight(ratio) {
@@ -628,46 +874,46 @@ class ShootingRange {
     }
 
     setFullScreenFit() {
-        // 自動切換為 1 個十字架置中
+        // 自動切換為「🖼️ 整張相片」模式 + 1 個十字架置中，確保整張相片完整全屏顯示！
+        this.setDisplayMode('full');
+
         const countSelect = document.getElementById('targetCountSelect');
         if (countSelect && countSelect.value !== '1') {
             countSelect.value = '1';
             this.setTargetCount(1);
         }
 
-        let fitScale = 4.5;
+        let fitScale = 2.8;
         if (this.uploadedImage) {
-            if (this.isCustomFull) {
-                // 全身圖片填滿視窗 (約 90% 螢幕高度)
-                fitScale = Math.min((this.height * 0.90) / 260, (this.width * 0.90) / (260 * (this.uploadedImage.width / this.uploadedImage.height)));
-            } else {
-                // 頭部圖片填滿視窗 (約 85% 螢幕高度)
-                const baseHr = this.dummies[0] ? this.dummies[0].headRadius : 35;
-                fitScale = (this.height * 0.85) / (baseHr * 2);
+            const aspect = this.uploadedImage.width / this.uploadedImage.height;
+            const dummyScale = this.dummies[0] ? this.dummies[0].scale : 1.15;
+            let baseH = 260 * dummyScale;
+            let baseW = baseH * aspect;
+            if (baseW > 300 * dummyScale) {
+                baseW = 300 * dummyScale;
+                baseH = baseW / aspect;
             }
+            fitScale = Math.min((this.height * 0.82) / baseH, (this.width * 0.90) / baseW);
         } else {
-            fitScale = (this.height * 0.88) / 320;
+            fitScale = (this.height * 0.85) / 320;
         }
 
         fitScale = Math.max(0.5, Math.min(fitScale, 10.0));
-        fitScale = Math.round(fitScale * 10) / 10;
+        fitScale = Math.round(fitScale * 20) / 20;
 
-        // 調整靶高度至螢幕下緣
-        this.setTargetHeight(0.95);
+        // 調整靶高度至最佳全屏位置
+        this.setTargetHeight(0.88);
         const heightSlider = document.getElementById('targetHeightSlider');
-        if (heightSlider) heightSlider.value = 95;
+        if (heightSlider) heightSlider.value = 88;
 
-        // 垂直偏移歸零
+        // 水平與垂直偏移歸零
+        this.setCustomOffsetX(0);
         this.setCustomOffsetY(0);
-        const offsetSlider = document.getElementById('imageOffsetSlider');
-        if (offsetSlider) offsetSlider.value = 0;
 
         // 套用縮放
-        const scaleSlider = document.getElementById('imageScaleSlider');
-        if (scaleSlider) scaleSlider.value = fitScale;
         this.setCustomScale(fitScale);
 
-        this.addFloatingText(this.width / 2, this.height * 0.45, '🖥️ 已啟用全螢幕巨靶！', '#00ffcc', 32, true);
+        this.addFloatingText(this.width / 2, this.height * 0.45, '🖼️ 已切換為整張相片全屏巨靶！', '#00ffcc', 28, true);
     }
 
     // 清理靶子上的彈孔和污漬
@@ -698,6 +944,7 @@ class ShootingRange {
 
         this.update(dt);
         this.render();
+        this.renderLivePreview();
 
         requestAnimationFrame((t) => this.loop(t));
     }
@@ -1149,11 +1396,32 @@ window.addEventListener('DOMContentLoaded', () => {
         });
     }
 
-    const fullBodyToggle = document.getElementById('fullBodyToggle');
-    if (fullBodyToggle) {
-        fullBodyToggle.addEventListener('change', (e) => {
-            window.game.isCustomFull = e.target.checked;
-            window.game.dummies.forEach(d => d.isCustomFull = e.target.checked);
+    // 三種顯示模式按鈕切換 (圓形頭像 / 方形頭像 / 整張相片)
+    document.querySelectorAll('.mode-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+            window.game.setDisplayMode(btn.dataset.mode);
+        });
+    });
+
+    // 即時預覽窗的特寫 / 全貌視角切換
+    const btnPreviewZoomToggle = document.getElementById('btnPreviewZoomToggle');
+    if (btnPreviewZoomToggle) {
+        btnPreviewZoomToggle.addEventListener('click', () => {
+            if (window.game.isCustomFull) {
+                // 若在整張相片模式下點擊，提示全貌視角
+                btnPreviewZoomToggle.innerText = '🔍 全貌視角';
+                return;
+            }
+            window.game.previewCloseUp = !window.game.previewCloseUp;
+            btnPreviewZoomToggle.innerText = window.game.previewCloseUp ? '🔍 特寫視角' : '🔍 全貌視角';
+        });
+    }
+
+    // 頭像框尺寸滑桿 (大頭模式)
+    const headFrameScaleSlider = document.getElementById('headFrameScaleSlider');
+    if (headFrameScaleSlider) {
+        headFrameScaleSlider.addEventListener('input', (e) => {
+            window.game.setHeadFrameScale(parseFloat(e.target.value));
         });
     }
 
@@ -1178,7 +1446,6 @@ window.addEventListener('DOMContentLoaded', () => {
         btnScaleMinus.addEventListener('click', () => {
             let step = parseFloat(scaleSlider.value) >= 3.0 ? 0.5 : 0.1;
             let val = Math.max(0.1, Math.round((parseFloat(scaleSlider.value) - step) * 10) / 10);
-            scaleSlider.value = val;
             window.game.setCustomScale(val);
         });
     }
@@ -1188,21 +1455,14 @@ window.addEventListener('DOMContentLoaded', () => {
         btnScalePlus.addEventListener('click', () => {
             let step = parseFloat(scaleSlider.value) >= 3.0 ? 0.5 : 0.1;
             let val = Math.min(10.0, Math.round((parseFloat(scaleSlider.value) + step) * 10) / 10);
-            scaleSlider.value = val;
             window.game.setCustomScale(val);
         });
     }
 
     const btnScaleReset = document.getElementById('btnScaleReset');
-    if (btnScaleReset && scaleSlider) {
+    if (btnScaleReset) {
         btnScaleReset.addEventListener('click', () => {
-            scaleSlider.value = 1.0;
             window.game.setCustomScale(1.0);
-            const offsetSlider = document.getElementById('imageOffsetSlider');
-            if (offsetSlider) {
-                offsetSlider.value = 0;
-                window.game.setCustomOffsetY(0);
-            }
         });
     }
 
@@ -1218,7 +1478,6 @@ window.addEventListener('DOMContentLoaded', () => {
     document.querySelectorAll('.btn-scale-preset').forEach(btn => {
         btn.addEventListener('click', () => {
             const scale = parseFloat(btn.dataset.scale);
-            if (scaleSlider) scaleSlider.value = scale;
             window.game.setCustomScale(scale);
         });
     });
@@ -1241,37 +1500,33 @@ window.addEventListener('DOMContentLoaded', () => {
 
     // 方向微調快捷按鈕
     const btnPosUp = document.getElementById('btnPosUp');
-    if (btnPosUp && offsetYSlider) {
+    if (btnPosUp) {
         btnPosUp.addEventListener('click', () => {
-            const val = Math.max(-500, window.game.customOffsetY - 15);
-            offsetYSlider.value = val;
+            const val = Math.max(-500, window.game.customOffsetY - 10);
             window.game.setCustomOffsetY(val);
         });
     }
 
     const btnPosDown = document.getElementById('btnPosDown');
-    if (btnPosDown && offsetYSlider) {
+    if (btnPosDown) {
         btnPosDown.addEventListener('click', () => {
-            const val = Math.min(500, window.game.customOffsetY + 15);
-            offsetYSlider.value = val;
+            const val = Math.min(500, window.game.customOffsetY + 10);
             window.game.setCustomOffsetY(val);
         });
     }
 
     const btnPosLeft = document.getElementById('btnPosLeft');
-    if (btnPosLeft && offsetXSlider) {
+    if (btnPosLeft) {
         btnPosLeft.addEventListener('click', () => {
-            const val = Math.max(-500, window.game.customOffsetX - 15);
-            offsetXSlider.value = val;
+            const val = Math.max(-500, window.game.customOffsetX - 10);
             window.game.setCustomOffsetX(val);
         });
     }
 
     const btnPosRight = document.getElementById('btnPosRight');
-    if (btnPosRight && offsetXSlider) {
+    if (btnPosRight) {
         btnPosRight.addEventListener('click', () => {
-            const val = Math.min(500, window.game.customOffsetX + 15);
-            offsetXSlider.value = val;
+            const val = Math.min(500, window.game.customOffsetX + 10);
             window.game.setCustomOffsetX(val);
         });
     }
@@ -1279,24 +1534,21 @@ window.addEventListener('DOMContentLoaded', () => {
     const btnPosCenter = document.getElementById('btnPosCenter');
     if (btnPosCenter) {
         btnPosCenter.addEventListener('click', () => {
-            if (offsetXSlider) offsetXSlider.value = 0;
-            if (offsetYSlider) offsetYSlider.value = 0;
             window.game.setCustomOffsetX(0);
             window.game.setCustomOffsetY(0);
-        });
-    }
-
-    // 裁切樣式 (圓形 / 矩形)
-    const shapeSelect = document.getElementById('imageShapeSelect');
-    if (shapeSelect) {
-        shapeSelect.addEventListener('change', (e) => {
-            window.game.setCustomShape(e.target.value);
         });
     }
 
     // 手機/平板 控制面板摺疊與展開
     const btnTogglePanel = document.getElementById('btnTogglePanel');
     const controlPanel = document.getElementById('controlPanel');
+    const closePanel = () => {
+        if (controlPanel && btnTogglePanel) {
+            controlPanel.classList.add('collapsed');
+            btnTogglePanel.innerText = '⚙️';
+        }
+    };
+
     if (btnTogglePanel && controlPanel) {
         btnTogglePanel.addEventListener('click', () => {
             controlPanel.classList.toggle('collapsed');
@@ -1310,24 +1562,13 @@ window.addEventListener('DOMContentLoaded', () => {
         }
     }
 
-    // 觸控拖曳照片模式按鈕切換
-    const btnTouchDragMode = document.getElementById('btnTouchDragMode');
-    if (btnTouchDragMode) {
-        btnTouchDragMode.addEventListener('click', () => {
-            window.game.touchDragMode = !window.game.touchDragMode;
-            if (window.game.touchDragMode) {
-                btnTouchDragMode.classList.add('active');
-                btnTouchDragMode.innerText = '🎯 點擊切換為射擊模式';
-                btnTouchDragMode.style.background = '#e91e63';
-                btnTouchDragMode.style.borderColor = '#ff4081';
-                window.game.addFloatingText(window.game.width / 2, window.game.height * 0.45, '🖐️ 拖曳模式已開啟：請在螢幕上滑動調整照片！', '#ff4081', 24, true);
-            } else {
-                btnTouchDragMode.classList.remove('active');
-                btnTouchDragMode.innerText = '🖐️ 觸控滑動調整照片';
-                btnTouchDragMode.style.background = '';
-                btnTouchDragMode.style.borderColor = '';
-                window.game.addFloatingText(window.game.width / 2, window.game.height * 0.45, '🎯 射擊模式已就緒！', '#00ffcc', 24, true);
-            }
-        });
+    const btnHeaderClosePanel = document.getElementById('btnHeaderClosePanel');
+    if (btnHeaderClosePanel) {
+        btnHeaderClosePanel.addEventListener('click', closePanel);
+    }
+
+    const btnClosePanelPlay = document.getElementById('btnClosePanelPlay');
+    if (btnClosePanelPlay) {
+        btnClosePanelPlay.addEventListener('click', closePanel);
     }
 });

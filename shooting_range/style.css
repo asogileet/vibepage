@@ -333,6 +333,30 @@ select:hover, .btn:hover {
     letter-spacing: 0.5px;
 }
 
+/* 顯示模式切換按鈕 */
+.mode-btn {
+    background: #1c2128;
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    color: #8b949e;
+    border-radius: 6px;
+    transition: all 0.2s ease;
+}
+
+.mode-btn.active {
+    background: linear-gradient(135deg, rgba(0, 229, 255, 0.25), rgba(0, 119, 182, 0.35));
+    border: 1.5px solid #00e5ff;
+    color: #ffffff;
+    box-shadow: 0 0 10px rgba(0, 229, 255, 0.35);
+}
+
+#livePreviewCanvas:active {
+    cursor: grabbing;
+}
+
+.mobile-only-btn {
+    display: none;
+}
+
 /* 全域防止行動端手勢干擾 */
 body, html, #gameCanvas {
     touch-action: none;
@@ -346,12 +370,17 @@ body, html, #gameCanvas {
         display: flex;
     }
 
+    .mobile-only-btn {
+        display: inline-block;
+    }
+
     #controlPanel {
-        top: 65px;
+        top: 62px;
         left: 10px;
         width: calc(100vw - 20px);
-        max-width: 340px;
-        max-height: calc(100vh - 160px);
+        max-width: 350px;
+        max-height: calc(100vh - 145px);
+        padding: 12px 14px;
         z-index: 99;
     }
 
