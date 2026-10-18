@@ -1,0 +1,421 @@
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+    user-select: none;
+}
+
+body, html {
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+    background-color: #0b0e14;
+    font-family: 'Segoe UI', -apple-system, BlinkMacSystemFont, Roboto, sans-serif;
+    color: #e6edf3;
+    cursor: crosshair;
+}
+
+#gameCanvas {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    display: block;
+    z-index: 1;
+}
+
+/* UI 覆蓋層 */
+#ui-container {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    z-index: 10;
+    pointer-events: none;
+}
+
+.panel {
+    pointer-events: auto;
+    background: rgba(18, 22, 34, 0.85);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    border-radius: 12px;
+    padding: 14px 18px;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+    transition: all 0.2s ease;
+}
+
+.panel:hover {
+    border-color: rgba(255, 255, 255, 0.25);
+}
+
+/* 浮動選單按鈕 (手機/平板) */
+.floating-btn {
+    pointer-events: auto;
+    position: absolute;
+    top: 14px;
+    left: 14px;
+    width: 44px;
+    height: 44px;
+    border-radius: 50%;
+    background: rgba(18, 22, 34, 0.9);
+    border: 1px solid rgba(0, 229, 255, 0.4);
+    color: #00e5ff;
+    font-size: 20px;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    z-index: 100;
+    box-shadow: 0 4px 15px rgba(0,0,0,0.5);
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.floating-btn:hover, .floating-btn:active {
+    background: rgba(0, 229, 255, 0.2);
+    transform: scale(1.08);
+}
+
+/* 左上角自訂與靶場設定 */
+#controlPanel {
+    position: absolute;
+    top: 18px;
+    left: 18px;
+    width: 335px;
+    max-height: calc(100vh - 140px);
+    overflow-y: auto;
+    transition: transform 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275), opacity 0.25s ease;
+}
+
+#controlPanel.collapsed {
+    transform: translateX(-125%);
+    opacity: 0;
+    pointer-events: none;
+}
+
+#controlPanel::-webkit-scrollbar {
+    width: 4px;
+}
+#controlPanel::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.2);
+    border-radius: 4px;
+}
+
+.panel-title {
+    font-size: 15px;
+    font-weight: 700;
+    letter-spacing: 0.8px;
+    text-transform: uppercase;
+    color: #00e5ff;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 12px;
+}
+
+.control-group {
+    margin-bottom: 12px;
+}
+
+.control-label {
+    font-size: 12px;
+    color: #8b949e;
+    margin-bottom: 6px;
+    display: block;
+}
+
+/* 上傳框樣式 */
+.upload-box {
+    border: 2px dashed rgba(0, 229, 255, 0.4);
+    border-radius: 8px;
+    padding: 12px;
+    text-align: center;
+    cursor: pointer;
+    background: rgba(0, 229, 255, 0.04);
+    transition: all 0.2s;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 6px;
+}
+
+.upload-box:hover {
+    background: rgba(0, 229, 255, 0.1);
+    border-color: #00e5ff;
+}
+
+.upload-box input {
+    display: none;
+}
+
+.upload-icon {
+    font-size: 24px;
+}
+
+.upload-text {
+    font-size: 12px;
+    color: #c9d1d9;
+    font-weight: 500;
+}
+
+.preview-container {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-top: 8px;
+}
+
+#uploadPreview {
+    width: 44px;
+    height: 44px;
+    border-radius: 50%;
+    object-fit: cover;
+    border: 2px solid #00e5ff;
+    display: none;
+}
+
+#uploadStatus {
+    font-size: 12px;
+    color: #3fb950;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 200px;
+}
+
+/* 控制選項行 */
+.row-controls {
+    display: flex;
+    gap: 10px;
+    align-items: center;
+    margin-top: 8px;
+}
+
+select, .btn {
+    background: #21262d;
+    color: #c9d1d9;
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    padding: 6px 12px;
+    border-radius: 6px;
+    font-size: 12px;
+    outline: none;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+select:hover, .btn:hover {
+    background: #30363d;
+    border-color: rgba(255, 255, 255, 0.3);
+}
+
+.btn-primary {
+    background: #238636;
+    border-color: #2ea043;
+    color: #fff;
+    font-weight: 600;
+}
+
+.btn-primary:hover {
+    background: #2ea043;
+}
+
+.checkbox-label {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 12px;
+    color: #c9d1d9;
+    cursor: pointer;
+}
+
+/* 右上角戰績與發洩計分板 */
+#statsPanel {
+    position: absolute;
+    top: 18px;
+    right: 18px;
+    width: 230px;
+}
+
+.stat-row {
+    display: flex;
+    justify-content: space-between;
+    margin-bottom: 6px;
+    font-size: 13px;
+}
+
+.stat-label {
+    color: #8b949e;
+}
+
+.stat-val {
+    font-weight: 700;
+    color: #ffcc00;
+}
+
+.stat-val.headshot {
+    color: #ff4d4d;
+}
+
+/* 底部武器切換欄 */
+#weaponBar {
+    position: absolute;
+    bottom: 22px;
+    left: 50%;
+    transform: translateX(-50%);
+    display: flex;
+    gap: 10px;
+    pointer-events: auto;
+    padding: 10px 14px;
+    border-radius: 14px;
+}
+
+.weapon-btn {
+    position: relative;
+    background: rgba(33, 38, 45, 0.85);
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    color: #f0f6fc;
+    padding: 10px 18px;
+    border-radius: 10px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+    cursor: pointer;
+    transition: all 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+    min-width: 90px;
+}
+
+.weapon-btn:hover {
+    transform: translateY(-4px);
+    background: rgba(48, 54, 61, 0.95);
+    border-color: #00e5ff;
+}
+
+.weapon-btn.active {
+    background: linear-gradient(135deg, rgba(0, 229, 255, 0.25), rgba(0, 100, 255, 0.25));
+    border: 2px solid #00e5ff;
+    box-shadow: 0 0 16px rgba(0, 229, 255, 0.45);
+    transform: translateY(-6px);
+}
+
+.weapon-icon {
+    font-size: 26px;
+}
+
+.weapon-name {
+    font-size: 12px;
+    font-weight: 600;
+}
+
+.weapon-key {
+    position: absolute;
+    top: 4px;
+    right: 6px;
+    font-size: 10px;
+    background: rgba(0,0,0,0.4);
+    padding: 1px 5px;
+    border-radius: 4px;
+    color: #8b949e;
+}
+
+/* 快捷提示標籤 */
+#hotkeyTips {
+    position: absolute;
+    bottom: 100px;
+    left: 50%;
+    transform: translateX(-50%);
+    font-size: 12px;
+    color: rgba(255,255,255,0.4);
+    pointer-events: none;
+    letter-spacing: 0.5px;
+}
+
+/* 全域防止行動端手勢干擾 */
+body, html, #gameCanvas {
+    touch-action: none;
+    -webkit-touch-callout: none;
+    -webkit-user-select: none;
+}
+
+/* 手機與平板響應式優化 (小於 768px) */
+@media (max-width: 768px) {
+    .floating-btn {
+        display: flex;
+    }
+
+    #controlPanel {
+        top: 65px;
+        left: 10px;
+        width: calc(100vw - 20px);
+        max-width: 340px;
+        max-height: calc(100vh - 160px);
+        z-index: 99;
+    }
+
+    #statsPanel {
+        top: 10px;
+        right: 10px;
+        padding: 6px 10px;
+        width: auto;
+    }
+
+    #statsPanel .panel-title {
+        font-size: 11px;
+        margin-bottom: 4px;
+    }
+
+    .stat-row {
+        font-size: 10px;
+        margin-bottom: 2px;
+        gap: 6px;
+    }
+
+    /* 底部武器切換欄改為橫向滑動卡片 */
+    #weaponBar {
+        bottom: 10px;
+        width: calc(100vw - 16px);
+        max-width: 100%;
+        overflow-x: auto;
+        overflow-y: hidden;
+        justify-content: flex-start;
+        padding: 6px;
+        gap: 6px;
+        border-radius: 12px;
+        -webkit-overflow-scrolling: touch;
+    }
+
+    #weaponBar::-webkit-scrollbar {
+        height: 2px;
+    }
+
+    #weaponBar::-webkit-scrollbar-thumb {
+        background: rgba(0, 229, 255, 0.3);
+    }
+
+    .weapon-btn {
+        min-width: 68px;
+        padding: 6px 8px;
+        border-radius: 8px;
+        flex-shrink: 0;
+        gap: 2px;
+    }
+
+    .weapon-icon {
+        font-size: 20px;
+    }
+
+    .weapon-name {
+        font-size: 10px;
+    }
+
+    .weapon-key {
+        display: none;
+    }
+
+    #hotkeyTips {
+        display: none;
+    }
+}
