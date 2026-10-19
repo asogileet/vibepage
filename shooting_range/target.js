@@ -1,8 +1,6 @@
 // 十字架人偶靶子 (Crucified Dummy Target)
 class CrucifiedDummy {
     constructor(x, y, scale = 1.0, customImage = null, isCustomFull = false) {
-        this.targetCategory = 'cross';
-        this.row = 0;
         this.x = x;
         this.y = y; // 十字架底部地面錨點
         this.baseX = x;
@@ -38,8 +36,9 @@ class CrucifiedDummy {
         this.isDead = false;
         this.respawnTimer = 0;
 
-        // 痕跡紀錄
+        // 痕跡紀錄與子彈射入動態特效
         this.bulletHoles = [];
+        this.activeEntries = []; // 正在鑽入靶體的子彈射入動畫
         this.splats = []; // 番茄/雞蛋污漬
 
         // 尺寸計算 (相對於基準高度約 320px)
@@ -89,6 +88,27 @@ class CrucifiedDummy {
             if (this.hitFlash < 0) this.hitFlash = 0;
         }
 
+        // 更新子彈射入鑽擊動畫
+        for (let i = this.activeEntries.length - 1; i >= 0; i--) {
+            const entry = this.activeEntries[i];
+            entry.life -= dt;
+            if (entry.life <= 0) {
+                this.activeEntries.splice(i, 1);
+            }
+        }
+
+        // 更新彈孔灼熱度與冒煙計時
+        for (let i = 0; i < this.bulletHoles.length; i++) {
+            const h = this.bulletHoles[i];
+            if (h.heat > 0) {
+                h.heat = Math.max(0, h.heat - dt * 0.65);
+            }
+            if (h.smokeLife > 0) {
+                h.smokeLife = Math.max(0, h.smokeLife - dt);
+                h.smokePhase += dt * 4.5;
+            }
+        }
+
         // 番茄醬流淌動態
         for (let s of this.splats) {
             if (s.drip < s.maxDrip) {
@@ -109,6 +129,7 @@ class CrucifiedDummy {
         this.isDead = false;
         this.hp = this.maxHp;
         this.bulletHoles = [];
+        this.activeEntries = [];
         this.splats = [];
         this.angle = 0;
         this.angleVel = 0;
@@ -201,7 +222,7 @@ class CrucifiedDummy {
         return null;
     }
 
-    applyImpulse(impactLocalX, impactLocalY, force, damage, isTomato = false, hitData = null) {
+    applyImpulse(impactLocalX, impactLocalY, force, damage, isTomato = false, hitData = null, entryAngle = -Math.PI * 0.65, weaponColor = '#ffaa00') {
         if (this.isDead) return;
 
         // 左右旋轉扭矩 (力臂 * 力)
@@ -221,13 +242,12 @@ class CrucifiedDummy {
         this.hp -= damage;
         if (this.hp <= 0) {
             this.hp = 0;
-            // 暫時不要完全消失，可以進入大損壞狀態，或者斷掉重置
-            // this.isDead = true;
-            // this.respawnTimer = 2.5;
         }
 
         // 記錄痕跡 (根據 customScale 動態適配痕跡大小)
         const scaleMult = this.customImage ? Math.max(1, Math.min(this.customScale * 0.7, 3.5)) : 1;
+        const localEntryAngle = entryAngle - this.angle;
+
         if (isTomato) {
             this.splats.push({
                 x: impactLocalX,
@@ -239,14 +259,35 @@ class CrucifiedDummy {
             });
             if (this.splats.length > 50) this.splats.shift();
         } else {
+            const holeRadius = 4.2 * this.scale * scaleMult * (0.85 + Math.random() * 0.45);
+            const part = hitData ? hitData.part : 'body';
+
             this.bulletHoles.push({
                 x: impactLocalX,
                 y: impactLocalY,
-                radius: 3.5 * this.scale * scaleMult * (0.8 + Math.random() * 0.5),
-                part: hitData ? hitData.part : 'body',
-                angle: Math.random() * Math.PI * 2
+                radius: holeRadius,
+                part: part,
+                angle: Math.random() * Math.PI * 2,
+                entryAngle: localEntryAngle,
+                heat: 1.0, // 剛射入時的高溫紅熱狀態
+                smokeLife: 1.8, // 彈孔冒煙時間
+                smokePhase: Math.random() * Math.PI * 2
             });
-            if (this.bulletHoles.length > 120) this.bulletHoles.shift();
+            if (this.bulletHoles.length > 140) this.bulletHoles.shift();
+
+            // 新增「子彈射入/鑽入靶體」即時動態特效
+            this.activeEntries.push({
+                x: impactLocalX,
+                y: impactLocalY,
+                radius: holeRadius,
+                entryAngle: localEntryAngle,
+                color: weaponColor,
+                part: part,
+                crit: hitData ? !!hitData.crit : false,
+                life: 0.18,
+                maxLife: 0.18
+            });
+            if (this.activeEntries.length > 35) this.activeEntries.shift();
         }
 
         // 嘎吱聲
@@ -626,38 +667,77 @@ class CrucifiedDummy {
     }
 
     drawDecals(ctx) {
-        // 彈孔
-        for (let hole of this.bulletHoles) {
+        const totalHoles = this.bulletHoles.length;
+        // 1. 繪製立體射入彈孔 (含方向性凹陷、灼熱紅光邊緣、鑲嵌彈尾與裊裊青煙)
+        for (let idx = 0; idx < totalHoles; idx++) {
+            const hole = this.bulletHoles[idx];
             ctx.save();
             ctx.translate(hole.x, hole.y);
 
-            // 焦黑邊緣
-            ctx.fillStyle = 'rgba(10, 10, 10, 0.85)';
-            ctx.beginPath();
-            ctx.arc(0, 0, hole.radius, 0, Math.PI * 2);
-            ctx.fill();
+            const r = hole.radius;
+            const ea = hole.entryAngle !== undefined ? hole.entryAngle : -Math.PI * 0.65;
+            const cosE = Math.cos(ea);
+            const sinE = Math.sin(ea);
 
-            // 內圈深洞
-            ctx.fillStyle = '#050505';
+            // 外圍放射狀撕裂裂痕
+            ctx.strokeStyle = hole.part === 'wood' ? 'rgba(35, 18, 8, 0.85)' : 'rgba(60, 20, 20, 0.78)';
+            ctx.lineWidth = Math.max(1, r * 0.25);
             ctx.beginPath();
-            ctx.arc(0, 0, hole.radius * 0.6, 0, Math.PI * 2);
-            ctx.fill();
-
-            // 撕裂裂痕
-            ctx.strokeStyle = 'rgba(50, 30, 20, 0.7)';
-            ctx.lineWidth = 1;
-            ctx.beginPath();
-            for (let i = 0; i < 4; i++) {
-                const a = hole.angle + (i * Math.PI) / 2;
+            for (let i = 0; i < 6; i++) {
+                const a = hole.angle + (i * Math.PI) / 3;
+                const len = r * (i % 2 === 0 ? 2.2 : 1.5);
                 ctx.moveTo(0, 0);
-                ctx.lineTo(Math.cos(a) * hole.radius * 1.8, Math.sin(a) * hole.radius * 1.8);
+                ctx.lineTo(Math.cos(a) * len, Math.sin(a) * len);
             }
             ctx.stroke();
+
+            // 射入方向的斜向焦黑破口外圈 (呈現子彈斜向鑽入的立體感)
+            ctx.fillStyle = 'rgba(22, 16, 14, 0.9)';
+            ctx.beginPath();
+            ctx.arc(-cosE * r * 0.22, -sinE * r * 0.22, r * 1.15, 0, Math.PI * 2);
+            ctx.fill();
+
+            // 剛射入時的高溫灼熱熔岩紅光邊緣 (Glowing Hot Rim)
+            if (hole.heat > 0.02) {
+                ctx.strokeStyle = `rgba(255, ${Math.round(80 + hole.heat * 120)}, 20, ${hole.heat * 0.9})`;
+                ctx.lineWidth = r * 0.55;
+                ctx.beginPath();
+                ctx.arc(0, 0, r * 0.88, 0, Math.PI * 2);
+                ctx.stroke();
+            }
+
+            // 內圈深邃彈道黑洞 (往射入方向微偏，形成深坑立體透視)
+            ctx.fillStyle = '#040404';
+            ctx.beginPath();
+            ctx.arc(cosE * r * 0.2, sinE * r * 0.2, r * 0.72, 0, Math.PI * 2);
+            ctx.fill();
+
+            // 深坑內部殘留的黃銅彈頭底部微光 (讓玩家看到子彈鑲嵌在孔內)
+            ctx.fillStyle = hole.heat > 0.05
+                ? `rgba(255, 200, 80, ${0.45 + hole.heat * 0.55})`
+                : 'rgba(180, 135, 50, 0.42)';
+            ctx.beginPath();
+            ctx.arc(cosE * r * 0.28, sinE * r * 0.28, r * 0.34, 0, Math.PI * 2);
+            ctx.fill();
+
+            // 最新 25 個彈孔飄出裊裊硝煙 (Rising Gun Smoke)
+            if (hole.smokeLife > 0 && idx >= totalHoles - 25) {
+                const smAlpha = Math.min(0.45, (hole.smokeLife / 1.8) * 0.45);
+                const driftY = -(1.8 - hole.smokeLife) * 22 * this.scale;
+                const driftX = Math.sin(hole.smokePhase) * 6 * this.scale;
+                ctx.strokeStyle = `rgba(210, 220, 230, ${smAlpha})`;
+                ctx.lineWidth = Math.max(1.5, r * 0.65);
+                ctx.lineCap = 'round';
+                ctx.beginPath();
+                ctx.moveTo(0, -r * 0.3);
+                ctx.quadraticCurveTo(driftX, driftY * 0.5, -driftX * 0.6, driftY);
+                ctx.stroke();
+            }
 
             ctx.restore();
         }
 
-        // 番茄汁 / 糊狀噴濺
+        // 2. 番茄汁 / 糊狀噴濺
         for (let splat of this.splats) {
             ctx.save();
             ctx.translate(splat.x, splat.y);
@@ -686,6 +766,128 @@ class CrucifiedDummy {
 
             ctx.restore();
         }
+
+        // 3. 繪製「子彈正在射入/鑽進靶體」的即時穿透動畫
+        this.drawActiveEntries(ctx);
+    }
+
+    drawActiveEntries(ctx) {
+        if (!this.activeEntries || this.activeEntries.length === 0) return;
+
+        for (let entry of this.activeEntries) {
+            const p = 1 - (entry.life / entry.maxLife); // 0.0 -> 1.0
+            const alpha = Math.max(0, 1 - p);
+            const r = entry.radius;
+
+            ctx.save();
+            ctx.translate(entry.x, entry.y);
+            ctx.rotate(entry.entryAngle);
+
+            // A. 射入破口處的高壓音爆環 (Entry Cavitation Shockwave Ring)
+            const ringScale = 0.6 + p * 3.4;
+            ctx.strokeStyle = entry.crit
+                ? `rgba(255, 60, 60, ${alpha * 0.92})`
+                : `rgba(255, 210, 90, ${alpha * 0.88})`;
+            ctx.lineWidth = Math.max(1.4, (1 - p) * 3.8);
+            ctx.beginPath();
+            ctx.ellipse(0, 0, r * ringScale * 0.55, r * ringScale * 1.25, 0, 0, Math.PI * 2);
+            ctx.stroke();
+
+            // A2. 射入瞬間的高速破空入射殘影線與音爆圈 (確保在高倍瞄準鏡內也能清楚看到子彈飛入軌跡)
+            if (p < 0.55) {
+                const inAlpha = (1 - p / 0.55) * 0.9;
+                const trailLen = r * 18;
+                const inGrad = ctx.createLinearGradient(-trailLen, 0, 0, 0);
+                inGrad.addColorStop(0, 'rgba(255, 120, 0, 0)');
+                inGrad.addColorStop(0.6, `rgba(255, 190, 50, ${inAlpha * 0.65})`);
+                inGrad.addColorStop(1, `rgba(255, 255, 255, ${inAlpha})`);
+                ctx.strokeStyle = inGrad;
+                ctx.lineWidth = Math.max(1.8, r * 0.75 * inAlpha);
+                ctx.beginPath();
+                ctx.moveTo(-trailLen, 0);
+                ctx.lineTo(0, 0);
+                ctx.stroke();
+            }
+
+            // B. 子彈實體「鑽入靶面」過程 (前 80% 時間可見子彈尾端正往彈孔內高速沒入)
+            if (p < 0.82) {
+                const subP = p / 0.82; // 0 -> 1
+                const bLen = r * 5.8;
+                const bRad = r * 0.92;
+                // 子彈尖端已經刺入孔內，隨 subP 往 x 正方向深處鑽入
+                const offsetX = -bLen * (1 - subP * 0.92);
+
+                ctx.save();
+                // 裁切區域：只顯示尚未完全沒入彈孔 (x <= r * 0.3) 的後半截子彈與曳光尾焰，呈現真實「射入靶內」視覺！
+                ctx.beginPath();
+                ctx.rect(-bLen * 2.5, -bRad * 4, bLen * 2.5 + r * 0.3, bRad * 8);
+                ctx.clip();
+
+                // 鑽入中的子彈曳光尾跡
+                const tailGrad = ctx.createLinearGradient(offsetX - bLen * 1.3, 0, offsetX + bLen * 0.5, 0);
+                tailGrad.addColorStop(0, 'rgba(255, 100, 0, 0)');
+                tailGrad.addColorStop(1, entry.color || '#ffaa00');
+                ctx.strokeStyle = tailGrad;
+                ctx.lineWidth = bRad * 1.7;
+                ctx.lineCap = 'round';
+                ctx.beginPath();
+                ctx.moveTo(offsetX - bLen * 1.3, 0);
+                ctx.lineTo(offsetX + bLen * 0.4, 0);
+                ctx.stroke();
+
+                // 鑽入中的黃銅彈體後半部
+                const bGrad = ctx.createLinearGradient(0, -bRad, 0, bRad);
+                bGrad.addColorStop(0, '#fff5b8');
+                bGrad.addColorStop(0.45, '#f39c12');
+                bGrad.addColorStop(1, '#7f3000');
+                ctx.fillStyle = bGrad;
+                ctx.beginPath();
+                ctx.moveTo(offsetX, -bRad);
+                ctx.lineTo(offsetX + bLen * 0.65, -bRad);
+                ctx.quadraticCurveTo(offsetX + bLen, -bRad * 0.4, offsetX + bLen * 1.1, 0);
+                ctx.quadraticCurveTo(offsetX + bLen, bRad * 0.4, offsetX + bLen * 0.65, bRad);
+                ctx.lineTo(offsetX, bRad);
+                ctx.closePath();
+                ctx.fill();
+
+                // 彈底白熱曳光點
+                ctx.fillStyle = '#ffffff';
+                ctx.beginPath();
+                ctx.arc(offsetX, 0, bRad * 0.78, 0, Math.PI * 2);
+                ctx.fill();
+
+                ctx.restore();
+            }
+
+            // C. 射入瞬間的逆向破片/血霧/火花噴流 (Entry Back-Spatter & Spark Jet)
+            const jetLen = r * (2.5 + p * 6.5);
+            for (let j = -2; j <= 2; j++) {
+                const spreadA = Math.PI + j * 0.24;
+                const d1 = r * (0.4 + p * 1.8);
+                const d2 = d1 + jetLen * (1 - Math.abs(j) * 0.18);
+                ctx.strokeStyle = j === 0
+                    ? `rgba(255, 255, 220, ${alpha})`
+                    : (entry.part === 'wood'
+                        ? `rgba(210, 150, 80, ${alpha * 0.9})`
+                        : `rgba(255, ${entry.crit ? 50 : 140}, 40, ${alpha * 0.9})`);
+                ctx.lineWidth = Math.max(1, r * 0.35 * (1 - p));
+                ctx.beginPath();
+                ctx.moveTo(Math.cos(spreadA) * d1, Math.sin(spreadA) * d1);
+                ctx.lineTo(Math.cos(spreadA) * d2, Math.sin(spreadA) * d2);
+                ctx.stroke();
+            }
+
+            // 破口中心瞬時火光核
+            if (p < 0.45) {
+                const flashA = (1 - p / 0.45) * 0.95;
+                ctx.fillStyle = `rgba(255, 240, 180, ${flashA})`;
+                ctx.beginPath();
+                ctx.arc(0, 0, r * (1.5 - p), 0, Math.PI * 2);
+                ctx.fill();
+            }
+
+            ctx.restore();
+        }
     }
 
     drawHealthBar(ctx) {
@@ -708,786 +910,4 @@ class CrucifiedDummy {
     }
 }
 
-// ============================================================================
-// 2. 相片倒靶 / 真實立靶 (Knockdown Photo Target - 打到就往後倒、自動彈起)
-// ============================================================================
-class KnockdownPhotoTarget {
-    constructor(x, y, scale = 1.0, customImage = null, isCustomFull = false, row = 0) {
-        this.targetCategory = 'knockdown';
-        this.row = row;
-        this.x = x;
-        this.y = y; // 底部鉸鏈錨點 (固定在靶台軌道上)
-        this.baseX = x;
-        this.baseY = y;
-        this.baseScale = scale;
-        this.scale = scale;
-
-        // 自訂相片設定
-        this.customImage = customImage;
-        this.isCustomFull = isCustomFull;
-        this.customScale = 1.0;
-        this.customOffsetX = 0;
-        this.customOffsetY = 0;
-        this.customShape = 'circle'; // 'circle' | 'rect'
-        this.headFrameScale = 1.0;
-
-        // 預設無照片時的標靶樣式 (0: 經典紅白同心圓靶, 1: 戰術人形計分胸環靶, 2: 黃黑警用金屬倒靶)
-        this.dummyType = Math.floor(Math.random() * 3);
-
-        // 往後倒物理系統 (fallAngle: 0 為直立, Math.PI/2 為 90度向後平躺倒下)
-        this.fallAngle = 0;
-        this.fallVel = 0;
-        this.isFalling = false;
-        this.isDown = false;
-        this.isRising = false;
-        this.downTimer = 0;
-
-        // 左右受擊微晃與震動
-        this.angle = 0;
-        this.angleVel = 0;
-        this.shakeX = 0;
-        this.shakeY = 0;
-        this.hitFlash = 0;
-
-        // 彈孔與番茄汁紀錄
-        this.bulletHoles = [];
-        this.splats = [];
-        this.knockdownCount = 0;
-
-        this.updateDimensions();
-    }
-
-    updateDimensions() {
-        const s = this.scale * (this.headFrameScale ? Math.max(0.8, Math.min(this.headFrameScale * 0.85, 2.2)) : 1.0);
-        this.boardWidth = 135 * s;
-        this.boardHeight = 165 * s;
-        this.stemHeight = 24 * this.scale; // 底部金屬轉軸立柱高度
-        this.totalHeight = this.boardHeight + this.stemHeight;
-    }
-
-    setScale(newScale) {
-        this.scale = newScale;
-        this.updateDimensions();
-    }
-
-    update(dt) {
-        this.updateDimensions();
-
-        // 1. 往後倒下物理動畫
-        if (this.isFalling) {
-            // 重力加速往後倒
-            this.fallVel += 28 * dt;
-            this.fallAngle += this.fallVel * dt;
-
-            if (this.fallAngle >= Math.PI / 2) {
-                this.fallAngle = Math.PI / 2;
-                // 撞擊後擋板微幅反彈
-                if (Math.abs(this.fallVel) > 3.5) {
-                    this.fallVel = -this.fallVel * 0.25;
-                } else {
-                    this.fallVel = 0;
-                    this.isFalling = false;
-                    this.isDown = true;
-                    this.downTimer = 2.0 + Math.random() * 0.6; // 倒下約 2 秒後自動彈起
-                }
-            }
-        } else if (this.isDown) {
-            this.downTimer -= dt;
-            if (this.downTimer <= 0) {
-                this.isDown = false;
-                this.isRising = true;
-            }
-        } else if (this.isRising) {
-            // 機械彈簧將靶牌重新彈起立正
-            this.fallAngle -= dt * 8.5;
-            if (this.fallAngle <= 0) {
-                this.fallAngle = 0;
-                this.fallVel = 0;
-                this.isRising = false;
-                // 彈起後清除舊彈孔，方便下一輪射擊
-                this.bulletHoles = [];
-                this.splats = [];
-                // 微小彈起晃動
-                this.angleVel = (Math.random() - 0.5) * 1.2;
-            }
-        }
-
-        // 2. 左右微幅擺動阻尼
-        const springK = 45;
-        const damping = 0.88;
-        this.angleVel = (this.angleVel - springK * this.angle * dt) * damping;
-        this.angle += this.angleVel * dt;
-
-        // 3. 震動與閃光衰減
-        this.shakeX *= 0.82;
-        this.shakeY *= 0.82;
-        if (this.hitFlash > 0) {
-            this.hitFlash = Math.max(0, this.hitFlash - dt * 6);
-        }
-
-        // 番茄汁流淌
-        for (let s of this.splats) {
-            if (s.drip < s.maxDrip) s.drip += dt * 8;
-        }
-    }
-
-    respawn() {
-        this.fallAngle = 0;
-        this.fallVel = 0;
-        this.isFalling = false;
-        this.isDown = false;
-        this.isRising = false;
-        this.bulletHoles = [];
-        this.splats = [];
-        this.angle = 0;
-        this.angleVel = 0;
-    }
-
-    getBoardRect() {
-        const s = this.scale;
-        const frameScale = this.headFrameScale || 1.0;
-
-        // 若有上傳相片且為「整張相片」模式，依照相片長寬比決定立牌尺寸
-        if (this.customImage && this.isCustomFull) {
-            const aspect = this.customImage.width / this.customImage.height;
-            let baseH = 190 * s;
-            let baseW = baseH * aspect;
-            if (baseW > 240 * s) {
-                baseW = 240 * s;
-                baseH = baseW / aspect;
-            }
-            const w = baseW * this.customScale;
-            const h = baseH * this.customScale;
-            const cx = this.customOffsetX * s;
-            const cy = -this.stemHeight - h / 2 + this.customOffsetY * s;
-            return { cx, cy, w, h, shape: 'rect' };
-        }
-
-        // 圓形或方形立牌模式
-        if (this.customShape === 'rect') {
-            const w = 140 * s * frameScale;
-            const h = 165 * s * frameScale;
-            const cx = 0;
-            const cy = -this.stemHeight - h / 2;
-            return { cx, cy, w, h, shape: 'rect' };
-        } else {
-            const r = 72 * s * frameScale;
-            const cx = 0;
-            const cy = -this.stemHeight - r;
-            return { cx, cy, w: r * 2, h: r * 2, r, shape: 'circle' };
-        }
-    }
-
-    hitTest(hitX, hitY) {
-        // 如果已經往後倒下超過 40 度，子彈會從上方飛過，不再重複觸發
-        if (this.isDown || this.fallAngle > 0.7) return null;
-
-        const dx = hitX - (this.x + this.shakeX);
-        const dy = hitY - (this.y + this.shakeY);
-
-        const cosA = Math.max(0.15, Math.cos(this.fallAngle));
-        const localX = dx;
-        const localY = dy / cosA; // 補償後仰透視壓縮
-
-        const rect = this.getBoardRect();
-        if (rect.shape === 'circle') {
-            const dist = Math.hypot(localX - rect.cx, localY - rect.cy);
-            if (dist <= rect.r * 1.04) {
-                const isBullseye = dist <= rect.r * 0.38;
-                return {
-                    part: isBullseye ? 'head' : 'body',
-                    localX,
-                    localY,
-                    crit: isBullseye,
-                    multiplier: isBullseye ? 2.5 : 1.2
-                };
-            }
-        } else {
-            const halfW = rect.w / 2;
-            const halfH = rect.h / 2;
-            if (
-                localX >= rect.cx - halfW &&
-                localX <= rect.cx + halfW &&
-                localY >= rect.cy - halfH &&
-                localY <= rect.cy + halfH
-            ) {
-                // 中心紅心或上半部中心視為暴擊
-                const normX = (localX - rect.cx) / halfW;
-                const normY = (localY - rect.cy) / halfH;
-                const isBullseye = Math.hypot(normX, normY + 0.12) <= 0.42;
-                return {
-                    part: isBullseye ? 'head' : 'body',
-                    localX,
-                    localY,
-                    crit: isBullseye,
-                    multiplier: isBullseye ? 2.5 : 1.2
-                };
-            }
-        }
-
-        return null;
-    }
-
-    applyImpulse(impactLocalX, impactLocalY, force, damage, isTomato = false, hitData = null) {
-        this.hitFlash = 1.0;
-        this.shakeX = (Math.random() - 0.5) * 8;
-        this.shakeY = (Math.random() - 0.5) * 4;
-        this.angleVel += (impactLocalX / (80 * this.scale)) * 1.5;
-
-        // 記錄彈孔或番茄漬
-        if (isTomato) {
-            this.splats.push({
-                x: impactLocalX,
-                y: impactLocalY,
-                radius: 16 * this.scale * (0.85 + Math.random() * 0.4),
-                color: Math.random() > 0.15 ? '#b81d13' : '#d1431f',
-                drip: 0,
-                maxDrip: 18 + Math.random() * 25
-            });
-        } else {
-            this.bulletHoles.push({
-                x: impactLocalX,
-                y: impactLocalY,
-                radius: 4 * this.scale * (0.85 + Math.random() * 0.4),
-                angle: Math.random() * Math.PI * 2
-            });
-        }
-
-        // 觸發往後倒！ (打到就往後倒)
-        if (!this.isDown) {
-            this.isFalling = true;
-            this.isRising = false;
-            // 依據武器推力給予往後倒的角速度，確保一槍就乾脆俐落往後倒
-            this.fallVel = Math.max(9.5, force * 0.45);
-            this.knockdownCount++;
-            if (window.soundFX) window.soundFX.playTargetKnockdown();
-        }
-    }
-
-    draw(ctx, isPreview = false) {
-        ctx.save();
-        ctx.translate(this.x + this.shakeX, this.y + this.shakeY);
-
-        const s = this.scale;
-        const cosFall = Math.max(0.07, Math.cos(this.fallAngle));
-        const sinFall = Math.sin(this.fallAngle);
-
-        // 1. 地面/靶架上的投影 (往後倒時陰影向後延伸)
-        if (!isPreview) {
-            ctx.save();
-            ctx.fillStyle = `rgba(0, 0, 0, ${0.32 + sinFall * 0.25})`;
-            ctx.beginPath();
-            ctx.ellipse(
-                sinFall * 14 * s,
-                -sinFall * 18 * s,
-                (65 + sinFall * 15) * s,
-                (12 + sinFall * 28) * s,
-                0, 0, Math.PI * 2
-            );
-            ctx.fill();
-            ctx.restore();
-        }
-
-        // 2. 繪製底部金屬轉軸鉸鏈與回彈彈簧座 (固定在軌道上，不隨板子壓扁)
-        this.drawHingeBase(ctx);
-
-        // 3. 繪製可往後傾倒的靶牌本體 (利用 3D 透視縱向壓縮 + 微傾角模擬真實往後倒下)
-        ctx.save();
-        ctx.rotate(this.angle * cosFall);
-
-        // 當往後倒時，板子頂端向遠處傾斜壓縮
-        ctx.transform(1, 0, sinFall * 0.14, cosFall, 0, 0);
-
-        const rect = this.getBoardRect();
-
-        // 連接轉軸與靶牌底部的金屬支撐柄
-        ctx.fillStyle = '#55606e';
-        ctx.strokeStyle = '#222831';
-        ctx.lineWidth = 2 * s;
-        ctx.fillRect(-10 * s, -this.stemHeight - 4 * s, 20 * s, this.stemHeight + 4 * s);
-        ctx.strokeRect(-10 * s, -this.stemHeight - 4 * s, 20 * s, this.stemHeight + 4 * s);
-
-        // 往後倒時露出靶牌的 3D 厚度底邊/頂邊，讓「往後倒平躺」視覺極度逼真
-        if (sinFall > 0.15) {
-            const thickness = 14 * s * (sinFall / Math.max(0.12, cosFall));
-            ctx.fillStyle = '#3d2b1f';
-            if (rect.shape === 'circle') {
-                ctx.beginPath();
-                ctx.arc(rect.cx, rect.cy + thickness, rect.r + 4 * s, 0, Math.PI * 2);
-                ctx.fill();
-            } else {
-                ctx.fillRect(rect.cx - rect.w / 2 - 4 * s, rect.cy - rect.h / 2 + thickness, rect.w + 8 * s, rect.h + 8 * s);
-            }
-        }
-
-        // 繪製靶板內容 (自訂相片 或 經典標靶)
-        this.drawTargetBoard(ctx, rect, isPreview);
-
-        // 繪製彈孔與番茄污漬
-        this.drawDecals(ctx);
-
-        // 往後倒下的背光陰影遮罩與受擊閃光
-        if (sinFall > 0.05 || this.hitFlash > 0.05) {
-            ctx.save();
-            if (rect.shape === 'circle') {
-                ctx.beginPath();
-                ctx.arc(rect.cx, rect.cy, rect.r, 0, Math.PI * 2);
-                ctx.clip();
-            } else {
-                ctx.beginPath();
-                ctx.rect(rect.cx - rect.w / 2, rect.cy - rect.h / 2, rect.w, rect.h);
-                ctx.clip();
-            }
-
-            if (sinFall > 0.05) {
-                ctx.fillStyle = `rgba(10, 14, 22, ${sinFall * 0.55})`;
-                ctx.fillRect(rect.cx - rect.w, rect.cy - rect.h, rect.w * 2, rect.h * 2);
-            }
-            if (this.hitFlash > 0.05) {
-                ctx.fillStyle = `rgba(255, 220, 120, ${this.hitFlash * 0.42})`;
-                ctx.fillRect(rect.cx - rect.w, rect.cy - rect.h, rect.w * 2, rect.h * 2);
-            }
-            ctx.restore();
-        }
-
-        ctx.restore();
-        ctx.restore();
-    }
-
-    drawHingeBase(ctx) {
-        const s = this.scale;
-        // 底座鐵板
-        ctx.fillStyle = '#2f3640';
-        ctx.strokeStyle = '#15191f';
-        ctx.lineWidth = 2 * s;
-        ctx.beginPath();
-        if (ctx.roundRect) {
-            ctx.roundRect(-34 * s, -8 * s, 68 * s, 14 * s, 4 * s);
-        } else {
-            ctx.rect(-34 * s, -8 * s, 68 * s, 14 * s);
-        }
-        ctx.fill();
-        ctx.stroke();
-
-        // 左右鉚釘與中央轉軸圓筒
-        ctx.fillStyle = '#95a5a6';
-        ctx.beginPath();
-        ctx.arc(-22 * s, -1 * s, 3 * s, 0, Math.PI * 2);
-        ctx.arc(22 * s, -1 * s, 3 * s, 0, Math.PI * 2);
-        ctx.fill();
-
-        ctx.fillStyle = '#f39c12';
-        ctx.fillRect(-14 * s, -11 * s, 28 * s, 6 * s);
-    }
-
-    drawTargetBoard(ctx, rect, isPreview = false) {
-        const s = this.scale;
-
-        // 情況 A：有上傳自訂相片
-        if (this.customImage) {
-            if (this.isCustomFull) {
-                // 整張相片直接當成立牌靶！外加厚實靶框與四個角落固定夾
-                const drawX = rect.cx - rect.w / 2;
-                const drawY = rect.cy - rect.h / 2;
-
-                // 背板白邊框
-                ctx.fillStyle = '#f5f6fa';
-                ctx.strokeStyle = isPreview ? '#00e5ff' : '#d63031';
-                ctx.lineWidth = 5 * s;
-                ctx.fillRect(drawX - 6 * s, drawY - 6 * s, rect.w + 12 * s, rect.h + 12 * s);
-                ctx.strokeRect(drawX - 6 * s, drawY - 6 * s, rect.w + 12 * s, rect.h + 12 * s);
-
-                // 相片本體
-                ctx.drawImage(this.customImage, drawX, drawY, rect.w, rect.h);
-
-                // 淡淡的準心同心環浮水印，讓相片看起來更像真實標靶
-                ctx.save();
-                ctx.strokeStyle = 'rgba(255, 50, 50, 0.38)';
-                ctx.lineWidth = 2 * s;
-                const minDim = Math.min(rect.w, rect.h);
-                ctx.beginPath();
-                ctx.arc(rect.cx, rect.cy, minDim * 0.35, 0, Math.PI * 2);
-                ctx.arc(rect.cx, rect.cy, minDim * 0.16, 0, Math.PI * 2);
-                ctx.moveTo(rect.cx - minDim * 0.42, rect.cy);
-                ctx.lineTo(rect.cx + minDim * 0.42, rect.cy);
-                ctx.moveTo(rect.cx, rect.cy - minDim * 0.42);
-                ctx.lineTo(rect.cx, rect.cy + minDim * 0.42);
-                ctx.stroke();
-                ctx.restore();
-                return;
-            }
-
-            // 圓形或方形相片標靶牌
-            const aspect = this.customImage.width / this.customImage.height;
-            let baseSize = Math.max(rect.w, rect.h);
-            let drawW = baseSize * this.customScale;
-            let drawH = baseSize * this.customScale;
-            if (aspect > 1) drawW = drawH * aspect;
-            else drawH = drawW / aspect;
-
-            const photoX = rect.cx + this.customOffsetX * s;
-            const photoY = rect.cy + this.customOffsetY * s;
-
-            if (isPreview) {
-                ctx.save();
-                ctx.globalAlpha = 0.25;
-                ctx.drawImage(this.customImage, photoX - drawW / 2, photoY - drawH / 2, drawW, drawH);
-                ctx.restore();
-            }
-
-            ctx.save();
-            if (rect.shape === 'circle') {
-                // 外層紅白相間靶環外框
-                ctx.fillStyle = '#d63031';
-                ctx.beginPath();
-                ctx.arc(rect.cx, rect.cy, rect.r + 8 * s, 0, Math.PI * 2);
-                ctx.fill();
-
-                ctx.fillStyle = '#ffffff';
-                ctx.beginPath();
-                ctx.arc(rect.cx, rect.cy, rect.r + 3 * s, 0, Math.PI * 2);
-                ctx.fill();
-
-                ctx.beginPath();
-                ctx.arc(rect.cx, rect.cy, rect.r, 0, Math.PI * 2);
-                ctx.clip();
-                ctx.drawImage(this.customImage, photoX - drawW / 2, photoY - drawH / 2, drawW, drawH);
-            } else {
-                // 方形紅白框立牌靶
-                ctx.fillStyle = '#d63031';
-                ctx.fillRect(rect.cx - rect.w / 2 - 7 * s, rect.cy - rect.h / 2 - 7 * s, rect.w + 14 * s, rect.h + 14 * s);
-                ctx.fillStyle = '#ffffff';
-                ctx.fillRect(rect.cx - rect.w / 2 - 3 * s, rect.cy - rect.h / 2 - 3 * s, rect.w + 6 * s, rect.h + 6 * s);
-
-                ctx.beginPath();
-                ctx.rect(rect.cx - rect.w / 2, rect.cy - rect.h / 2, rect.w, rect.h);
-                ctx.clip();
-                ctx.drawImage(this.customImage, photoX - drawW / 2, photoY - drawH / 2, drawW, drawH);
-            }
-
-            // 標靶紅心浮水印線
-            ctx.strokeStyle = 'rgba(255, 40, 40, 0.35)';
-            ctx.lineWidth = 2 * s;
-            const ringR = Math.min(rect.w, rect.h) * 0.25;
-            ctx.beginPath();
-            ctx.arc(rect.cx, rect.cy, ringR, 0, Math.PI * 2);
-            ctx.moveTo(rect.cx - ringR * 1.4, rect.cy);
-            ctx.lineTo(rect.cx + ringR * 1.4, rect.cy);
-            ctx.moveTo(rect.cx, rect.cy - ringR * 1.4);
-            ctx.lineTo(rect.cx, rect.cy + ringR * 1.4);
-            ctx.stroke();
-            ctx.restore();
-            return;
-        }
-
-        // 情況 B：尚未上傳相片時的預設經典立靶 (紅白同心圓靶 / 戰術胸環靶)
-        if (rect.shape === 'rect') {
-            const left = rect.cx - rect.w / 2;
-            const top = rect.cy - rect.h / 2;
-            ctx.fillStyle = '#f5f0e6';
-            ctx.strokeStyle = '#2d3436';
-            ctx.lineWidth = 4 * s;
-            ctx.fillRect(left, top, rect.w, rect.h);
-            ctx.strokeRect(left, top, rect.w, rect.h);
-
-            // 戰術人形剪影與同心計分環
-            ctx.fillStyle = '#1e272e';
-            ctx.beginPath();
-            ctx.arc(rect.cx, rect.cy - rect.h * 0.22, rect.w * 0.18, 0, Math.PI * 2);
-            ctx.fill();
-            ctx.beginPath();
-            ctx.roundRect(rect.cx - rect.w * 0.34, rect.cy - rect.h * 0.05, rect.w * 0.68, rect.h * 0.48, 12 * s);
-            ctx.fill();
-
-            const rings = [0.28, 0.18, 0.08];
-            rings.forEach((ratio, idx) => {
-                ctx.strokeStyle = idx === 2 ? '#ff3838' : 'rgba(255,255,255,0.6)';
-                ctx.fillStyle = idx === 2 ? '#ff3838' : 'transparent';
-                ctx.lineWidth = 2 * s;
-                ctx.beginPath();
-                ctx.arc(rect.cx, rect.cy + rect.h * 0.12, rect.w * ratio, 0, Math.PI * 2);
-                if (idx === 2) ctx.fill();
-                ctx.stroke();
-            });
-        } else {
-            // 經典紅白同心圓飛盤/立牌靶
-            const colors = ['#d63031', '#ffffff', '#d63031', '#ffffff', '#ffdd59'];
-            const radii = [1.0, 0.78, 0.56, 0.34, 0.16];
-            for (let i = 0; i < radii.length; i++) {
-                ctx.fillStyle = colors[i];
-                ctx.beginPath();
-                ctx.arc(rect.cx, rect.cy, rect.r * radii[i], 0, Math.PI * 2);
-                ctx.fill();
-            }
-            ctx.strokeStyle = '#222';
-            ctx.lineWidth = 3 * s;
-            ctx.beginPath();
-            ctx.arc(rect.cx, rect.cy, rect.r, 0, Math.PI * 2);
-            ctx.stroke();
-        }
-    }
-
-    drawDecals(ctx) {
-        for (let hole of this.bulletHoles) {
-            ctx.save();
-            ctx.translate(hole.x, hole.y);
-            ctx.fillStyle = '#111';
-            ctx.beginPath();
-            ctx.arc(0, 0, hole.radius, 0, Math.PI * 2);
-            ctx.fill();
-            ctx.strokeStyle = 'rgba(255,255,255,0.6)';
-            ctx.lineWidth = 1.2;
-            ctx.stroke();
-            ctx.restore();
-        }
-        for (let splat of this.splats) {
-            ctx.save();
-            ctx.translate(splat.x, splat.y);
-            ctx.fillStyle = splat.color;
-            ctx.beginPath();
-            ctx.arc(0, 0, splat.radius, 0, Math.PI * 2);
-            ctx.fill();
-            ctx.restore();
-        }
-    }
-}
-
-// ============================================================================
-// 3. 氣球靶 (Balloon Target - 射到就破掉、可印上自訂相片、支援多排漂浮)
-// ============================================================================
-const BALLOON_PALETTE = [
-    '#ff2a55', // 鮮紅
-    '#00d2ff', // 亮藍
-    '#ffcc00', // 亮黃
-    '#ff5e00', // 亮橘
-    '#b53cff', // 亮紫
-    '#2ecc71', // 翠綠
-    '#ff4da6'  // 桃粉
-];
-
-class BalloonTarget {
-    constructor(x, y, scale = 1.0, customImage = null, isCustomFull = false, row = 0, colorIndex = null) {
-        this.targetCategory = 'balloon';
-        this.row = row;
-        this.x = x;
-        this.y = y; // 氣球綁繩底部錨點
-        this.baseX = x;
-        this.baseY = y;
-        this.baseScale = scale;
-        this.scale = scale;
-
-        this.customImage = customImage;
-        this.isCustomFull = isCustomFull;
-        this.customScale = 1.0;
-        this.customOffsetX = 0;
-        this.customOffsetY = 0;
-        this.customShape = 'circle';
-        this.headFrameScale = 1.0;
-
-        const cIdx = colorIndex !== null ? colorIndex % BALLOON_PALETTE.length : Math.floor(Math.random() * BALLOON_PALETTE.length);
-        this.color = BALLOON_PALETTE[cIdx];
-
-        // 漂浮擺動參數
-        this.bobTime = Math.random() * Math.PI * 2;
-        this.bobSpeed = 2.0 + Math.random() * 1.2;
-        this.swayOffsetX = 0;
-        this.swayOffsetY = 0;
-
-        // 爆破與重生充氣狀態
-        this.isPopped = false;
-        this.respawnTimer = 0;
-        this.inflateScale = 1.0; // 重生時由小變大充氣動畫
-
-        this.updateDimensions();
-    }
-
-    updateDimensions() {
-        const s = this.scale * Math.max(0.8, Math.min((this.headFrameScale || 1.0) * 0.9, 2.2));
-        this.radiusX = 48 * s;
-        this.radiusY = 58 * s;
-        this.stringLength = 85 * this.scale;
-    }
-
-    setScale(newScale) {
-        this.scale = newScale;
-        this.updateDimensions();
-    }
-
-    getBalloonCenter() {
-        return {
-            x: this.x + this.swayOffsetX,
-            y: this.y - this.stringLength - this.radiusY * this.inflateScale + this.swayOffsetY
-        };
-    }
-
-    update(dt) {
-        this.updateDimensions();
-        this.bobTime += dt * this.bobSpeed;
-        this.swayOffsetX = Math.sin(this.bobTime) * 10 * this.scale;
-        this.swayOffsetY = Math.cos(this.bobTime * 1.5) * 6 * this.scale;
-
-        if (this.isPopped) {
-            this.respawnTimer -= dt;
-            if (this.respawnTimer <= 0) {
-                this.isPopped = false;
-                this.inflateScale = 0.15;
-                this.color = BALLOON_PALETTE[Math.floor(Math.random() * BALLOON_PALETTE.length)];
-            }
-        } else if (this.inflateScale < 1.0) {
-            this.inflateScale = Math.min(1.0, this.inflateScale + dt * 4.5);
-        }
-    }
-
-    respawn() {
-        this.isPopped = false;
-        this.respawnTimer = 0;
-        this.inflateScale = 1.0;
-    }
-
-    hitTest(hitX, hitY) {
-        if (this.isPopped) return null;
-        const center = this.getBalloonCenter();
-        const rx = this.radiusX * this.inflateScale * 1.08;
-        const ry = this.radiusY * this.inflateScale * 1.08;
-
-        const normX = (hitX - center.x) / rx;
-        const normY = (hitY - center.y) / ry;
-        const distSq = normX * normX + normY * normY;
-
-        if (distSq <= 1.0) {
-            const isCenter = distSq <= 0.35;
-            return {
-                part: 'balloon',
-                localX: hitX - center.x,
-                localY: hitY - center.y,
-                balloonCenterX: center.x,
-                balloonCenterY: center.y,
-                crit: isCenter,
-                multiplier: isCenter ? 2.0 : 1.0
-            };
-        }
-        return null;
-    }
-
-    applyImpulse(impactLocalX, impactLocalY, force, damage, isTomato = false, hitData = null) {
-        if (this.isPopped) return;
-        this.isPopped = true;
-        this.respawnTimer = 2.2 + Math.random() * 0.8;
-        if (window.soundFX) window.soundFX.playBalloonPop();
-    }
-
-    draw(ctx, isPreview = false) {
-        ctx.save();
-        const s = this.scale;
-        const bx = isPreview ? this.x : (this.x + this.swayOffsetX);
-        const by = isPreview
-            ? (this.y - this.stringLength - this.radiusY)
-            : (this.y - this.stringLength - this.radiusY * this.inflateScale + this.swayOffsetY);
-
-        // 1. 若已射破：只繪製底部斷掉垂落的殘留棉線
-        if (this.isPopped && !isPreview) {
-            ctx.strokeStyle = 'rgba(220, 220, 220, 0.55)';
-            ctx.lineWidth = 1.5 * s;
-            ctx.beginPath();
-            ctx.moveTo(this.x, this.y);
-            ctx.quadraticCurveTo(this.x + 8 * s, this.y - 18 * s, this.x - 4 * s, this.y - 32 * s);
-            ctx.stroke();
-            ctx.restore();
-            return;
-        }
-
-        const rx = this.radiusX * this.inflateScale;
-        const ry = this.radiusY * this.inflateScale;
-
-        // 2. 繪製氣球棉線 (從地面/軌道錨點連到氣球底端吹嘴)
-        ctx.strokeStyle = 'rgba(240, 240, 240, 0.75)';
-        ctx.lineWidth = 1.8 * s;
-        ctx.beginPath();
-        ctx.moveTo(this.x, this.y);
-        ctx.quadraticCurveTo(
-            (this.x + bx) / 2 + Math.sin(this.bobTime * 1.2) * 8 * s,
-            (this.y + by + ry) / 2,
-            bx,
-            by + ry + 5 * s
-        );
-        ctx.stroke();
-
-        // 3. 氣球底端吹嘴結 (小三角錐)
-        ctx.fillStyle = this.color;
-        ctx.beginPath();
-        ctx.moveTo(bx, by + ry - 1 * s);
-        ctx.lineTo(bx - 6 * s, by + ry + 7 * s);
-        ctx.lineTo(bx + 6 * s, by + ry + 7 * s);
-        ctx.closePath();
-        ctx.fill();
-
-        // 4. 氣球本體 (立體光澤橢圓)
-        ctx.save();
-        ctx.beginPath();
-        ctx.ellipse(bx, by, rx, ry, 0, 0, Math.PI * 2);
-
-        const grad = ctx.createRadialGradient(
-            bx - rx * 0.32,
-            by - ry * 0.32,
-            rx * 0.08,
-            bx,
-            by,
-            ry * 1.05
-        );
-        grad.addColorStop(0, '#ffffff');
-        grad.addColorStop(0.22, this.color);
-        grad.addColorStop(0.85, this.color);
-        grad.addColorStop(1, 'rgba(15, 15, 25, 0.85)');
-        ctx.fillStyle = grad;
-        ctx.fill();
-
-        // 若有上傳自訂相片，將相片印在氣球表面上！
-        if (this.customImage) {
-            ctx.clip();
-            const aspect = this.customImage.width / this.customImage.height;
-            let baseSize = Math.max(rx, ry) * 2.05;
-            let drawW = baseSize * this.customScale;
-            let drawH = baseSize * this.customScale;
-            if (aspect > 1) drawW = drawH * aspect;
-            else drawH = drawW / aspect;
-
-            const photoX = bx + this.customOffsetX * s;
-            const photoY = by + this.customOffsetY * s;
-
-            ctx.globalAlpha = 0.88;
-            ctx.drawImage(this.customImage, photoX - drawW / 2, photoY - drawH / 2, drawW, drawH);
-
-            // 疊加氣球邊緣立體內陰影與反光
-            const innerShade = ctx.createRadialGradient(bx - rx * 0.25, by - ry * 0.25, rx * 0.2, bx, by, ry);
-            innerShade.addColorStop(0, 'rgba(255,255,255,0.18)');
-            innerShade.addColorStop(0.7, 'rgba(0,0,0,0)');
-            innerShade.addColorStop(1, 'rgba(0,0,0,0.45)');
-            ctx.globalAlpha = 1.0;
-            ctx.fillStyle = innerShade;
-            ctx.fillRect(bx - rx, by - ry, rx * 2, ry * 2);
-        }
-        ctx.restore();
-
-        // 5. 氣球左上角高光亮斑 (讓氣球看起來Q彈晶瑩)
-        ctx.save();
-        ctx.fillStyle = 'rgba(255, 255, 255, 0.55)';
-        ctx.beginPath();
-        ctx.ellipse(bx - rx * 0.35, by - ry * 0.35, rx * 0.16, ry * 0.26, Math.PI / 6, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.restore();
-
-        // 外框微光
-        ctx.strokeStyle = isPreview ? '#00e5ff' : 'rgba(255, 255, 255, 0.25)';
-        ctx.lineWidth = (isPreview ? 2.5 : 1.2) * s;
-        ctx.beginPath();
-        ctx.ellipse(bx, by, rx, ry, 0, 0, Math.PI * 2);
-        ctx.stroke();
-
-        ctx.restore();
-    }
-}
-
 window.CrucifiedDummy = CrucifiedDummy;
-window.KnockdownPhotoTarget = KnockdownPhotoTarget;
-window.BalloonTarget = BalloonTarget;
-

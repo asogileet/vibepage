@@ -334,7 +334,7 @@ select:hover, .btn:hover {
 }
 
 /* 顯示模式切換按鈕 */
-.mode-btn {
+.mode-btn, .scope-mode-btn {
     background: #1c2128;
     border: 1px solid rgba(255, 255, 255, 0.15);
     color: #8b949e;
@@ -349,25 +349,21 @@ select:hover, .btn:hover {
     box-shadow: 0 0 10px rgba(0, 229, 255, 0.35);
 }
 
-/* 靶型模式切換按鈕 (十字架 / 倒靶 / 氣球 / 綜合) */
-.target-type-btn {
-    background: #1c2128;
-    border: 1px solid rgba(255, 255, 255, 0.15);
-    color: #9ca3af;
-    border-radius: 6px;
-    transition: all 0.2s ease;
-}
-
-.target-type-btn:hover {
-    border-color: rgba(255, 213, 79, 0.5);
-    color: #fff;
-}
-
-.target-type-btn.active {
-    background: linear-gradient(135deg, rgba(255, 193, 7, 0.3), rgba(255, 87, 34, 0.35));
-    border: 1.5px solid #ffd54f;
+.scope-mode-btn.active {
+    background: linear-gradient(135deg, rgba(0, 230, 118, 0.28), rgba(0, 150, 80, 0.38));
+    border: 1.5px solid #00e676;
     color: #ffffff;
-    box-shadow: 0 0 12px rgba(255, 193, 7, 0.4);
+    box-shadow: 0 0 10px rgba(0, 230, 118, 0.35);
+}
+
+/* 右側快捷瞄準鏡倍率浮動面板 */
+#scopeQuickHud {
+    position: absolute;
+    top: 195px;
+    right: 18px;
+    width: 230px;
+    padding: 10px 14px;
+    border-color: rgba(0, 230, 118, 0.3);
 }
 
 #livePreviewCanvas:active {
@@ -410,6 +406,13 @@ body, html, #gameCanvas {
         right: 10px;
         padding: 6px 10px;
         width: auto;
+    }
+
+    #scopeQuickHud {
+        top: 112px;
+        right: 10px;
+        width: auto;
+        padding: 6px 10px;
     }
 
     #statsPanel .panel-title {
